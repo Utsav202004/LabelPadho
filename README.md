@@ -1,11 +1,11 @@
-# 🔍 LabelPadho (लेबल पढ़ो)
+# LabelPadho (लेबल पढ़ो) (Read the Label)
 
 > **Decoding Indian Packaged Food with Multimodal AI & Deterministic Nutrition Analysis.**  
 > Built by a fitness-focused engineer for youth, students, and health-conscious eaters navigating misleading packaging.
 
 ---
 
-## 💡 The Problem
+## The Problem
 In the Indian FMCG landscape, marketing deception is rampant:
 1. **The "High Protein" Illusion**: "Protein chips" charging 3× price premiums for just 5g of low-grade protein per pack.
 2. **The Serving Size Trap**: A 150g packet listing macros for a tiny 25g serving to hide 1,200mg sodium and 15g palm oil.
@@ -16,7 +16,7 @@ In the Indian FMCG landscape, marketing deception is rampant:
 
 ---
 
-## 🏗️ Architecture & Pipeline
+## Architecture & Pipeline
 
 ```mermaid
 flowchart TD
@@ -49,7 +49,7 @@ flowchart TD
 
 ---
 
-## ⚡ Key Engineering Highlights (Resume Worthy)
+## Key Engineering Highlights (Resume Worthy)
 
 - **Multimodal Schema-Constrained Extraction**: Directly utilized Gemini 2.5 Flash's multimodal vision capabilities bounded by a strict Pydantic `LabelExtraction` schema. Bypasses error-prone two-step OCR+LLM pipelines and preserves spatial table context across mixed Hindi/English packaging.
 - **Strict Decoupling of AI & Logic**: The AI only transcribes the label into structured data. 100% of the mathematical ratios (price-per-gram-protein, serving multipliers) and regulatory risk flags are computed by a deterministic Python engine. This eliminates LLM hallucination in calculations.
@@ -59,7 +59,7 @@ flowchart TD
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 - **Backend**: Python 3.12+, FastAPI, Pydantic v2, pydantic-settings, Uvicorn
 - **AI/LLM**: Google GenAI SDK (Gemini 2.5 Flash multimodal)
@@ -69,7 +69,7 @@ flowchart TD
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
 ### 1. Clone & Set Environment
 ```bash
