@@ -1,0 +1,205 @@
+{
+    "_comment": "Curated database of food additives with regulatory status across markets. Sources: EFSA, FDA, FSSAI. This is the core knowledge base for ingredient flagging.",
+    "additives": [
+        {
+            "names": ["potassium bromate", "E924"],
+            "category": "flour_treatment",
+            "severity": "high",
+            "flag_type": "banned_elsewhere",
+            "title": "Banned in EU, UK, Canada, Brazil",
+            "explanation": "Potassium bromate is used to strengthen bread dough and make it rise higher. It has been classified as a possible human carcinogen (cancer-causing). The EU banned it in 1990, but it is still legally used in India.",
+            "source": "IARC Group 2B carcinogen; EU Regulation 1333/2008"
+        },
+        {
+            "names": ["tartrazine", "E102", "yellow 5", "INS 102", "FD&C yellow no. 5"],
+            "category": "artificial_color",
+            "severity": "medium",
+            "flag_type": "banned_elsewhere",
+            "title": "Requires warning label in EU",
+            "explanation": "Tartrazine is an artificial yellow color. In the EU, products containing it must carry a warning: 'may have adverse effect on activity and attention in children'. Studies have linked it to hyperactivity in children. It is freely used in India without warnings.",
+            "source": "EU Regulation 1333/2008; Southampton Study 2007"
+        },
+        {
+            "names": ["sunset yellow", "E110", "yellow 6", "INS 110", "FD&C yellow no. 6"],
+            "category": "artificial_color",
+            "severity": "medium",
+            "flag_type": "banned_elsewhere",
+            "title": "Requires warning label in EU",
+            "explanation": "Sunset Yellow is an artificial orange-yellow dye. Like Tartrazine, the EU requires a hyperactivity warning on products containing it. It is associated with allergic reactions in some people, especially those with aspirin sensitivity.",
+            "source": "EU Regulation 1333/2008"
+        },
+        {
+            "names": ["brilliant blue", "E133", "blue 1", "INS 133", "FD&C blue no. 1"],
+            "category": "artificial_color",
+            "severity": "low",
+            "flag_type": "health_concern",
+            "title": "Artificial color — banned in some countries",
+            "explanation": "Brilliant Blue is a synthetic blue dye. It is banned in Austria, Belgium, France, Germany, and Switzerland. While permitted in India and the US, it is purely cosmetic — it adds no nutritional value and exists only to make food look more appealing.",
+            "source": "Various national food safety regulations"
+        },
+        {
+            "names": ["carmoisine", "E122", "azorubine", "INS 122"],
+            "category": "artificial_color",
+            "severity": "medium",
+            "flag_type": "banned_elsewhere",
+            "title": "Banned in USA, Norway, Sweden",
+            "explanation": "Carmoisine is a red artificial dye. It is banned in the United States, Norway, and Sweden due to concerns about allergic reactions and hyperactivity in children. It is commonly found in Indian sweets and snacks.",
+            "source": "FDA; EU requires hyperactivity warning"
+        },
+        {
+            "names": ["BHA", "butylated hydroxyanisole", "E320"],
+            "category": "preservative",
+            "severity": "high",
+            "flag_type": "health_concern",
+            "title": "Possible carcinogen — restricted in EU",
+            "explanation": "BHA is a preservative used to prevent fats and oils from going rancid. The US National Toxicology Program classifies it as 'reasonably anticipated to be a human carcinogen'. The EU limits its use, but India allows it in many food categories.",
+            "source": "NTP 15th Report on Carcinogens; EU Regulation 1333/2008"
+        },
+        {
+            "names": ["BHT", "butylated hydroxytoluene", "E321"],
+            "category": "preservative",
+            "severity": "medium",
+            "flag_type": "health_concern",
+            "title": "Restricted in several countries",
+            "explanation": "BHT is an antioxidant preservative similar to BHA. It is banned in Japan, Romania, Sweden, and Australia for food use. Some studies suggest links to liver and kidney damage at high doses. It is commonly used in Indian packaged foods.",
+            "source": "Various national food safety authorities"
+        },
+        {
+            "names": ["partially hydrogenated vegetable oil", "partially hydrogenated palm oil", "partially hydrogenated soybean oil", "PHVO"],
+            "category": "fat",
+            "severity": "high",
+            "flag_type": "health_concern",
+            "title": "Source of artificial trans fats — banned by WHO",
+            "explanation": "Partially hydrogenated oils are the main source of artificial trans fats. The WHO called for a global ban on them by 2023. Trans fats increase bad cholesterol (LDL), decrease good cholesterol (HDL), and significantly raise heart disease risk. Even if the nutrition label says '0g trans fat', it can still contain up to 0.5g per serving (a legal loophole). If you see this in the ingredients, the product contains trans fats.",
+            "source": "WHO REPLACE initiative; FDA ban (2018); FSSAI limit: 2% of fat"
+        },
+        {
+            "names": ["sodium benzoate", "E211", "INS 211"],
+            "category": "preservative",
+            "severity": "medium",
+            "flag_type": "health_concern",
+            "title": "Forms benzene when combined with Vitamin C",
+            "explanation": "Sodium benzoate itself is relatively safe in small amounts. BUT when combined with ascorbic acid (Vitamin C), it can form benzene — a known carcinogen. If you see both sodium benzoate AND citric acid/ascorbic acid in the same product's ingredients, that is a genuine concern.",
+            "source": "FDA investigation 2006; EFSA opinion"
+        },
+        {
+            "names": ["aspartame", "E951", "INS 951"],
+            "category": "artificial_sweetener",
+            "severity": "medium",
+            "flag_type": "health_concern",
+            "title": "Classified as 'possibly carcinogenic' by WHO (2023)",
+            "explanation": "Aspartame is an artificial sweetener ~200x sweeter than sugar. In 2023, the WHO's IARC classified it as 'possibly carcinogenic to humans' (Group 2B). However, the JECFA (another WHO body) maintained that it is safe within daily limits. The controversy is ongoing. It is commonly found in Indian 'sugar-free' and 'diet' products.",
+            "source": "IARC Group 2B classification (2023); JECFA ADI: 40mg/kg body weight"
+        },
+        {
+            "names": ["MSG", "monosodium glutamate", "E621", "INS 621", "ajinomoto"],
+            "category": "flavor_enhancer",
+            "severity": "low",
+            "flag_type": "info",
+            "title": "Flavor enhancer — safe but often undisclosed",
+            "explanation": "MSG is a flavor enhancer that makes food taste more savory (umami). Despite decades of controversy, major food safety bodies consider it safe. The real concern: it can make processed food taste much better than it should, encouraging overconsumption. Also watch for hidden names like 'hydrolyzed vegetable protein', 'yeast extract', or 'natural flavoring' which contain free glutamate.",
+            "source": "FDA GRAS; EFSA ADI: 30mg/kg body weight"
+        },
+        {
+            "names": ["TBHQ", "tert-butylhydroquinone", "E319", "INS 319"],
+            "category": "preservative",
+            "severity": "medium",
+            "flag_type": "health_concern",
+            "title": "Restricted in Japan and some EU countries",
+            "explanation": "TBHQ is a synthetic preservative used in oils and fats. In high doses, animal studies showed stomach tumors. It is banned in Japan and its use is restricted in several EU countries. It is commonly found in Indian fried snacks and instant noodles.",
+            "source": "JECFA; various national authorities"
+        },
+        {
+            "names": ["high fructose corn syrup", "HFCS", "glucose-fructose syrup", "isoglucose"],
+            "category": "sweetener",
+            "severity": "medium",
+            "flag_type": "health_concern",
+            "title": "Linked to obesity and metabolic issues",
+            "explanation": "HFCS is a cheap liquid sweetener made from corn starch. It is metabolized differently from regular sugar — it goes directly to the liver and is more likely to be converted to fat. It is strongly linked to obesity, fatty liver disease, and type 2 diabetes. Not common in Indian products yet, but increasingly appearing in imported/western-style foods.",
+            "source": "Multiple peer-reviewed studies; American Journal of Clinical Nutrition"
+        },
+        {
+            "names": ["palm oil", "palmolein", "palm olein"],
+            "category": "fat",
+            "severity": "low",
+            "flag_type": "info",
+            "title": "High in saturated fat — most common cooking oil in Indian packaged food",
+            "explanation": "Palm oil is not toxic or banned anywhere, but it is very high in saturated fat (50%). Most Indian packaged snacks use it because it is the cheapest cooking oil. If a product says 'vegetable oil' without specifying which one, it is almost certainly palm oil. It is worse than mustard oil, olive oil, or groundnut oil for heart health, but better than partially hydrogenated oils.",
+            "source": "WHO; American Heart Association"
+        },
+        {
+            "names": ["INS 160(b)", "annatto", "annatto extract"],
+            "category": "natural_color",
+            "severity": "low",
+            "flag_type": "info",
+            "title": "Natural coloring — generally safe",
+            "explanation": "Annatto is a natural orange-red color derived from seeds of the achiote tree. It is generally considered safe and is a much better choice than artificial colors. If you see this instead of tartrazine or sunset yellow, it is a positive sign.",
+            "source": "EFSA; FDA GRAS"
+        },
+        {
+            "names": ["carrageenan", "E407", "INS 407"],
+            "category": "thickener",
+            "severity": "low",
+            "flag_type": "health_concern",
+            "title": "Controversial thickener — some concerns about gut inflammation",
+            "explanation": "Carrageenan is a natural thickener extracted from seaweed, commonly used in dairy alternatives (almond milk, soy milk) and processed foods. Some studies suggest it may cause gut inflammation. The EU considered banning it from infant formula. It is still generally considered safe by most regulators.",
+            "source": "EFSA re-evaluation; various studies on gut inflammation"
+        },
+        {
+            "names": ["acesulfame potassium", "acesulfame K", "ace-K", "E950", "INS 950"],
+            "category": "artificial_sweetener",
+            "severity": "low",
+            "flag_type": "info",
+            "title": "Artificial sweetener — limited long-term data",
+            "explanation": "Acesulfame K is an artificial sweetener often combined with aspartame or sucralose. It is 200x sweeter than sugar. Current evidence suggests it is safe within limits, but some researchers argue that long-term studies are insufficient. Commonly found in Indian 'sugar-free' drinks and supplements.",
+            "source": "EFSA ADI: 9mg/kg body weight; FDA GRAS"
+        },
+        {
+            "names": ["sodium nitrite", "E250", "INS 250", "potassium nitrate", "E252"],
+            "category": "preservative",
+            "severity": "medium",
+            "flag_type": "health_concern",
+            "title": "Linked to cancer risk in processed meats",
+            "explanation": "Sodium nitrite is used as a preservative in processed meats (sausages, bacon, ham, salami). When heated at high temperatures, nitrites can form nitrosamines — which are known carcinogens. The WHO classified processed meat as a Group 1 carcinogen, and nitrites are a major reason why.",
+            "source": "WHO/IARC Group 1 (processed meat); EFSA review"
+        }
+    ],
+    "misleading_terms": [
+        {
+            "term": "natural flavoring",
+            "reality": "The word 'natural' here is misleading. 'Natural flavoring' can be heavily processed and chemically altered. It just means the original source was natural — the final product may be far from it. By regulation, it only needs to have a natural origin, not be natural in the way consumers understand it."
+        },
+        {
+            "term": "multigrain",
+            "reality": "'Multigrain' just means more than one grain was used. It does NOT mean whole grain. The grains could all be refined (stripped of fiber and nutrients). Look for 'whole wheat' or 'whole grain' as the FIRST ingredient instead."
+        },
+        {
+            "term": "no added sugar",
+            "reality": "'No added sugar' does not mean low sugar. The product may contain natural sugars (from fruit juice concentrate, honey, dates) that are just as caloric. Check the total sugar content in the nutrition table."
+        },
+        {
+            "term": "baked not fried",
+            "reality": "'Baked not fried' sounds healthier but baked snacks often compensate with more fat, salt, or sugar to match the taste of fried ones. Always check the actual fat and sodium content."
+        },
+        {
+            "term": "contains real fruit",
+            "reality": "This could mean as little as 1-2% fruit content, often as fruit juice concentrate (which is basically sugar). The rest could be water, sugar, artificial flavors, and colors."
+        },
+        {
+            "term": "light / lite",
+            "reality": "'Light' or 'Lite' has no standardized legal definition in India. It might mean lighter in color, taste, texture — or nothing specific at all. In the US/EU, 'light' must mean 30% less of something (calories, fat), but in India this is not enforced."
+        },
+        {
+            "term": "cholesterol free",
+            "reality": "All plant-based oils are naturally cholesterol-free (cholesterol only exists in animal products). So labeling vegetable oil as 'cholesterol free' is technically true but intentionally misleading — it implies a special health benefit that every plant oil already has."
+        },
+        {
+            "term": "enriched / fortified",
+            "reality": "'Enriched' means nutrients were added back after processing removed them. 'Fortified' means nutrients were added that were never there. Both suggest the original food was processed enough to need artificial supplementation. Whole foods don't need enrichment."
+        },
+        {
+            "term": "protein chips",
+            "reality": "Many 'protein chips' have only marginally more protein than regular chips (e.g., 5g vs 3g per serving) but are marketed at 2-3x the price. Always check the actual protein per 100g and compare with the price."
+        }
+    ]
+}

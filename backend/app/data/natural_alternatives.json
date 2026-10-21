@@ -1,0 +1,131 @@
+{
+    "_comment": "Natural whole-food alternatives for common nutrients found in packaged foods. Prices are approximate 2024-25 Indian market rates.",
+    "alternatives": {
+        "protein": [
+            {
+                "food_name": "Whole Eggs",
+                "quantity": "2 eggs (~100g)",
+                "nutrient_amount": "12g protein",
+                "approx_cost_inr": 16,
+                "note": "Also provides healthy fats, Vitamin D, B12, choline. Cheapest complete protein source.",
+                "diet": ["eggetarian", "non_vegetarian"]
+            },
+            {
+                "food_name": "Chana (Chickpeas, boiled)",
+                "quantity": "100g (1 katori)",
+                "nutrient_amount": "9g protein",
+                "approx_cost_inr": 12,
+                "note": "Also provides 8g fiber, iron, and folate. One of the cheapest protein sources for vegetarians.",
+                "diet": ["vegetarian", "vegan"]
+            },
+            {
+                "food_name": "Paneer (Cottage Cheese)",
+                "quantity": "100g",
+                "nutrient_amount": "18g protein",
+                "approx_cost_inr": 45,
+                "note": "High in calcium and fat. Good protein density but also calorie-dense (265 kcal/100g).",
+                "diet": ["vegetarian"]
+            },
+            {
+                "food_name": "Moong Dal (cooked)",
+                "quantity": "100g (1 katori cooked)",
+                "nutrient_amount": "7g protein",
+                "approx_cost_inr": 8,
+                "note": "Excellent digestibility. One of the lightest protein sources. Also provides fiber and iron.",
+                "diet": ["vegetarian", "vegan"]
+            },
+            {
+                "food_name": "Curd / Dahi (homemade)",
+                "quantity": "200g (1 bowl)",
+                "nutrient_amount": "7g protein",
+                "approx_cost_inr": 12,
+                "note": "Also provides probiotics for gut health, calcium. Much cheaper than flavored yogurt.",
+                "diet": ["vegetarian"]
+            },
+            {
+                "food_name": "Chicken Breast (cooked)",
+                "quantity": "100g",
+                "nutrient_amount": "31g protein",
+                "approx_cost_inr": 35,
+                "note": "Highest protein density among common foods. Low fat. Best bang-for-buck for non-vegetarians.",
+                "diet": ["non_vegetarian"]
+            },
+            {
+                "food_name": "Soybean (boiled)",
+                "quantity": "100g",
+                "nutrient_amount": "17g protein",
+                "approx_cost_inr": 10,
+                "note": "Cheapest high-protein vegetarian source. Complete protein (all essential amino acids). Also high in fiber.",
+                "diet": ["vegetarian", "vegan"]
+            },
+            {
+                "food_name": "Milk (Toned)",
+                "quantity": "250ml (1 glass)",
+                "nutrient_amount": "8g protein",
+                "approx_cost_inr": 14,
+                "note": "Calcium, Vitamin D, B12. Much cheaper than protein shakes for the same protein.",
+                "diet": ["vegetarian"]
+            },
+            {
+                "food_name": "Peanuts (roasted)",
+                "quantity": "50g (1 handful)",
+                "nutrient_amount": "13g protein",
+                "approx_cost_inr": 10,
+                "note": "Also provides healthy fats and fiber. Calorie-dense (280 kcal per 50g) so portion control matters.",
+                "diet": ["vegetarian", "vegan"]
+            },
+            {
+                "food_name": "Sattu (roasted gram flour)",
+                "quantity": "50g (2 tbsp in water)",
+                "nutrient_amount": "11g protein",
+                "approx_cost_inr": 8,
+                "note": "Traditional Bihar/UP drink. High protein, fiber, and minerals. Excellent summer drink.",
+                "diet": ["vegetarian", "vegan"]
+            }
+        ],
+        "fiber": [
+            {
+                "food_name": "Isabgol (Psyllium Husk)",
+                "quantity": "10g (1 tbsp)",
+                "nutrient_amount": "8g fiber",
+                "approx_cost_inr": 5,
+                "note": "Soluble fiber supplement. Helps with digestion and cholesterol. Mix in water before meals.",
+                "diet": ["vegetarian", "vegan"]
+            },
+            {
+                "food_name": "Oats (cooked)",
+                "quantity": "40g dry (1 bowl cooked)",
+                "nutrient_amount": "4g fiber",
+                "approx_cost_inr": 8,
+                "note": "Beta-glucan fiber helps lower cholesterol. Also provides 5g protein.",
+                "diet": ["vegetarian", "vegan"]
+            },
+            {
+                "food_name": "Guava (1 medium)",
+                "quantity": "100g",
+                "nutrient_amount": "5g fiber",
+                "approx_cost_inr": 6,
+                "note": "One of the highest-fiber fruits. Also extremely rich in Vitamin C (4x more than oranges).",
+                "diet": ["vegetarian", "vegan"]
+            }
+        ],
+        "calcium": [
+            {
+                "food_name": "Ragi / Finger Millet (flour)",
+                "quantity": "50g",
+                "nutrient_amount": "172mg calcium",
+                "approx_cost_inr": 5,
+                "note": "Richest grain source of calcium. Make ragi roti or ragi porridge.",
+                "diet": ["vegetarian", "vegan"]
+            },
+            {
+                "food_name": "Til / Sesame Seeds",
+                "quantity": "20g (1 tbsp)",
+                "nutrient_amount": "195mg calcium",
+                "approx_cost_inr": 6,
+                "note": "Highest calcium density among seeds. Add to salads or make til chutney.",
+                "diet": ["vegetarian", "vegan"]
+            }
+        ]
+    }
+}
