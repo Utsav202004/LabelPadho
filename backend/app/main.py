@@ -87,9 +87,11 @@ app.add_middleware(
         "http://localhost:3000",    # Next.js dev server
         "http://127.0.0.1:3000",
         "http://localhost:5173",    # Vite dev server (backup)
-        "https://labelpadho.utsavgoyal.tech",  # custom domain
-        "https://*.vercel.app",
+        "https://labelpadho.utsavgoyal.tech",  # Custom subdomain
+        "https://utsavgoyal.tech",             # Custom apex domain
+        "https://label-padho-3frubwcsa-utsav-1bb6.vercel.app",  # Deployment URL
     ],
+    allow_origin_regex=r"https://.*\.vercel\.app",  # Regex allows any preview/production vercel deployments
     # Allow cookies/auth headers to be sent cross-origin
     allow_credentials=True,
     # Allow all HTTP methods (GET, POST, PUT, DELETE, etc.)

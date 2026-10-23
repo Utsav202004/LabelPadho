@@ -125,6 +125,11 @@ interface HistoryCard {
   has_calorie_discrepancy: boolean;
 }
 
+// In Next.js, env vars prefixed with NEXT_PUBLIC_ are available in the browser.
+// Locally: falls back to localhost:8000
+// On Vercel: set NEXT_PUBLIC_API_URL to your Render backend URL
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
 export default function Home() {
   const [activeTab, setActiveTab] = useState<"scan" | "history">("scan");
   
@@ -148,7 +153,7 @@ export default function Home() {
   const loadHistory = async () => {
     setHistoryLoading(true);
     try {
-      const res = await fetch("http://localhost:8000/api/history");
+      const res = await fetch(`${API_BASE}/api/history`);
       if (res.ok) {
         const data = await res.json();
         setHistoryList(data);
@@ -170,7 +175,7 @@ export default function Home() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`http://localhost:8000/api/history/${scanId}`);
+      const res = await fetch(`${API_BASE}/api/history/${scanId}`);
       if (!res.ok) throw new Error("Could not load past scan details");
       const pastData: ProductAnalysis = await res.json();
       setAnalysis(pastData);
@@ -186,7 +191,7 @@ export default function Home() {
   const deletePastScan = async (e: React.MouseEvent, scanId: number) => {
     e.stopPropagation();
     try {
-      const res = await fetch(`http://localhost:8000/api/history/${scanId}`, {
+      const res = await fetch(`${API_BASE}/api/history/${scanId}`, {
         method: "DELETE",
       });
       if (res.ok) {
@@ -215,7 +220,7 @@ export default function Home() {
     if (price.trim()) formData.append("price", price.trim());
 
     try {
-      const res = await fetch("http://localhost:8000/api/analyze", {
+      const res = await fetch(`${API_BASE}/api/analyze`, {
         method: "POST",
         body: formData,
       });
