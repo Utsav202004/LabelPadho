@@ -87,6 +87,8 @@ app.add_middleware(
         "http://localhost:3000",    # Next.js dev server
         "http://127.0.0.1:3000",
         "http://localhost:5173",    # Vite dev server (backup)
+        "https://labelpadho.utsavgoyal.tech",  # custom domain
+        "https://*.vercel.app",
     ],
     # Allow cookies/auth headers to be sent cross-origin
     allow_credentials=True,
