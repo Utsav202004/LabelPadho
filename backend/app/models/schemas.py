@@ -31,7 +31,24 @@ Pipeline flow:
                   ProductAnalysis (final output with flags, scores, tips)
 """
 
+from enum import Enum
 from pydantic import BaseModel, Field, model_validator
+
+
+class ProductCategory(str, Enum):
+    """
+    Standardized classification of food products.
+    Allows category-specific evaluation instead of judging all foods by protein.
+    """
+    PROTEIN_FITNESS = "protein_fitness"    # Protein bars, whey, peanut butter, high-protein snacks
+    STAPLE_GRAIN = "staple_grain"          # Atta, rice, oats, breakfast cereals, whole breads
+    DESSERT_SWEET = "dessert_sweet"        # Mithai, chocolate, ice cream, cookies, sweet biscuits
+    SAVORY_SNACK = "savory_snack"          # Chips, namkeen, bhujia, popcorn, instant noodles
+    BEVERAGE_JUICE = "beverage_juice"      # Fruit juices, nectars, fruit pulps
+    BEVERAGE_SODA = "beverage_soda"        # Carbonated drinks, energy drinks, colas
+    DAIRY_DAIRY_ALT = "dairy_dairy_alt"    # Milk, paneer, curd, plant milks, cheeses
+    CONDIMENT_SAUCE = "condiment_sauce"    # Ketchup, mayo, salad dressings, jams
+    GENERAL_PACKAGED = "general_packaged"  # General food items with no specific category
 
 
 # ============================================================
@@ -114,6 +131,19 @@ class LabelExtraction(BaseModel):
     product_name: str | None = Field(
         None,
         description="Product name as shown on the package"
+    )
+    product_category: ProductCategory = Field(
+        default=ProductCategory.GENERAL_PACKAGED,
+        description=(
+            "Standardized category of the product. Choose one of: "
+            "'protein_fitness', 'staple_grain', 'dessert_sweet', 'savory_snack', "
+            "'beverage_juice', 'beverage_soda', 'dairy_dairy_alt', 'condiment_sauce', "
+            "'general_packaged'"
+        )
+    )
+    category_reasoning: str | None = Field(
+        None,
+        description="Brief reason why the product belongs to this category"
     )
     brand: str | None = Field(
         None,
@@ -292,6 +322,10 @@ class ProductAnalysis(BaseModel):
 
     # Raw extraction
     extraction: LabelExtraction
+
+    # Category classification
+    product_category: ProductCategory = ProductCategory.GENERAL_PACKAGED
+    category_display_name: str = "Packaged Food"
 
     # Analysis layers
     ingredient_flags: list[IngredientFlag] = Field(default_factory=list)

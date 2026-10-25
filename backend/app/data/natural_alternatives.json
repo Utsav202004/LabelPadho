@@ -126,6 +126,76 @@
                 "note": "Highest calcium density among seeds. Add to salads or make til chutney.",
                 "diet": ["vegetarian", "vegan"]
             }
+        ],
+        "sweet_treat": [
+            {
+                "food_name": "Medjool Dates with Almonds/Walnuts",
+                "quantity": "2 dates + 4 nuts",
+                "nutrient_amount": "Natural sweetness + 3g fiber + magnesium",
+                "approx_cost_inr": 15,
+                "note": "Satisfies sweet tooth naturally without refined sugar, palm oil, or blood sugar crashes.",
+                "diet": ["vegetarian", "vegan"]
+            },
+            {
+                "food_name": "Dark Chocolate (75%+ Cacao)",
+                "quantity": "20g (2 squares)",
+                "nutrient_amount": "Flavonoid antioxidants + only 4g sugar",
+                "approx_cost_inr": 25,
+                "note": "Low glycemic load compared to milk chocolate; no palm oil or artificial emulsifiers.",
+                "diet": ["vegetarian", "vegan"]
+            },
+            {
+                "food_name": "Fresh Cut Figs / Anjeer",
+                "quantity": "2-3 fresh or soaked figs",
+                "nutrient_amount": "Rich in natural potassium, iron, and fiber",
+                "approx_cost_inr": 18,
+                "note": "Naturally intensely sweet with zero added refined sugars or preservative syrups.",
+                "diet": ["vegetarian", "vegan"]
+            }
+        ],
+        "refreshing_beverage": [
+            {
+                "food_name": "Fresh Tender Coconut Water",
+                "quantity": "1 whole coconut (~250ml)",
+                "nutrient_amount": "Natural potassium & electrolytes, zero added sugar",
+                "approx_cost_inr": 50,
+                "note": "Natural isotonic drink with zero artificial colors, zero phosphoric acid, and clean hydration.",
+                "diet": ["vegetarian", "vegan"]
+            },
+            {
+                "food_name": "Spiced Chaas / Buttermilk",
+                "quantity": "1 tall glass (250ml)",
+                "nutrient_amount": "Live gut probiotics + 3g protein + zero sugar",
+                "approx_cost_inr": 10,
+                "note": "Refreshing Indian staple that aids digestion without synthetic preservatives or empty calories.",
+                "diet": ["vegetarian"]
+            },
+            {
+                "food_name": "Fresh Nimbu Pani (Lemon Water)",
+                "quantity": "1 glass with rock salt / pinch of jaggery",
+                "nutrient_amount": "Vitamin C boost + hydration",
+                "approx_cost_inr": 8,
+                "note": "Beats sodas and packaged fruit juices hands-down in freshness, cost, and natural vitamin content.",
+                "diet": ["vegetarian", "vegan"]
+            }
+        ],
+        "savory_snack": [
+            {
+                "food_name": "Roasted Makhana (Foxnuts)",
+                "quantity": "30g (1 large bowl roasted in 1/2 tsp ghee/oil)",
+                "nutrient_amount": "High fiber, 3g protein, low glycemic index",
+                "approx_cost_inr": 20,
+                "note": "Crunchy substitute for potato chips with zero trans fats, zero palm olein, and low calories.",
+                "diet": ["vegetarian", "vegan"]
+            },
+            {
+                "food_name": "Roasted Chana (Black Gram)",
+                "quantity": "50g (1 handful)",
+                "nutrient_amount": "9g protein, 8g fiber, complex carbs",
+                "approx_cost_inr": 10,
+                "note": "High satiety crunchy snack that stabilizes blood sugar instead of spiking it.",
+                "diet": ["vegetarian", "vegan"]
+            }
         ]
     }
 }

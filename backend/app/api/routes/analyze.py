@@ -194,6 +194,7 @@ async def analyze_label(
         scan_record = ProductScan(
             user_id=user_id,
             product_name=extraction.product_name or product_name or "Food Product",
+            product_category=analysis.product_category.value if analysis.product_category else "general_packaged",
             brand=extraction.brand,
             price_inr=price,
             health_score=analysis.health_score,

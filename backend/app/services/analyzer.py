@@ -53,10 +53,51 @@ from app.models.schemas import (
     NutritionInfo,
     PriceAnalysis,
     ProductAnalysis,
+    ProductCategory,
     ServingReality,
 )
 
 logger = logging.getLogger(__name__)
+
+# User-friendly metadata for each food category
+CATEGORY_METADATA: dict[ProductCategory, dict[str, str]] = {
+    ProductCategory.PROTEIN_FITNESS: {
+        "display_name": "Protein & Fitness",
+        "description": "Products targeting protein intake, bodybuilding, or active fitness.",
+    },
+    ProductCategory.STAPLE_GRAIN: {
+        "display_name": "Staples & Grains",
+        "description": "Grains, flours, oats, and whole carbohydrates.",
+    },
+    ProductCategory.DESSERT_SWEET: {
+        "display_name": "Dessert & Sweet Treat",
+        "description": "Indulgent sweets, chocolates, cakes, or cookies.",
+    },
+    ProductCategory.SAVORY_SNACK: {
+        "display_name": "Savory Snack",
+        "description": "Chips, namkeens, puffs, and crunchy savory bites.",
+    },
+    ProductCategory.BEVERAGE_JUICE: {
+        "display_name": "Fruit Juice & Nectar",
+        "description": "Packaged fruit juices, nectars, and pulps.",
+    },
+    ProductCategory.BEVERAGE_SODA: {
+        "display_name": "Soda & Soft Drink",
+        "description": "Carbonated drinks, colas, energy drinks, and flavored fizzy sodas.",
+    },
+    ProductCategory.DAIRY_DAIRY_ALT: {
+        "display_name": "Dairy & Milk Alternative",
+        "description": "Milk, curd, paneer, and plant-based milk alternatives.",
+    },
+    ProductCategory.CONDIMENT_SAUCE: {
+        "display_name": "Condiment & Sauce",
+        "description": "Sauces, ketchups, spreads, and salad dressings.",
+    },
+    ProductCategory.GENERAL_PACKAGED: {
+        "display_name": "Packaged Food",
+        "description": "General packaged foods with standard nutritional profile.",
+    },
+}
 
 # ============================================================
 # Load knowledge bases at module level (once, at startup)
@@ -141,7 +182,7 @@ class Analyzer:
         claim_verifications = self._verify_front_claims(extraction)
         math_verification = self._verify_nutrition_math(extraction)
 
-        # Compute health score
+        # Compute health score with category awareness
         health_score = self._compute_health_score(extraction, flags)
 
         # Generate summaries
@@ -150,8 +191,16 @@ class Analyzer:
             extraction, flags, serving, price, alternatives
         )
 
+        category = extraction.product_category or ProductCategory.GENERAL_PACKAGED
+        category_meta = CATEGORY_METADATA.get(category, {
+            "display_name": "Packaged Food",
+            "description": "Standard packaged food product"
+        })
+
         return ProductAnalysis(
             extraction=extraction,
+            product_category=category,
+            category_display_name=category_meta["display_name"],
             ingredient_flags=flags,
             serving_reality=serving,
             price_analysis=price,
@@ -409,11 +458,22 @@ class Analyzer:
                 total_energy = nutrition.energy_kcal * s
 
         # Compute price-per-gram ratios
-        price_per_g_protein = (
-            round(price_inr / total_protein, 2)
-            if total_protein and total_protein > 0
-            else None
+        # Only compute protein price if protein is actually relevant to this food category
+        category = extraction.product_category or ProductCategory.GENERAL_PACKAGED
+        has_protein_claim = any("protein" in claim.lower() for claim in extraction.claims)
+        has_high_protein = (nutrition.protein_g and nutrition.protein_g >= 10) or (
+            per_100g and per_100g.protein_g and per_100g.protein_g >= 15
         )
+        is_protein_relevant = (
+            category in [ProductCategory.PROTEIN_FITNESS, ProductCategory.DAIRY_DAIRY_ALT]
+            or has_protein_claim
+            or has_high_protein
+        )
+
+        price_per_g_protein = None
+        if is_protein_relevant and total_protein and total_protein > 0:
+            price_per_g_protein = round(price_inr / total_protein, 2)
+
         price_per_g_fiber = (
             round(price_inr / total_fiber, 2)
             if total_fiber and total_fiber > 0
@@ -488,24 +548,74 @@ class Analyzer:
         price_inr: float | None,
     ) -> list[NaturalAlternative]:
         """
-        Suggest whole-food alternatives that provide the same nutrients
-        at a fraction of the cost.
+        Suggest whole-food alternatives tailored to the product's category.
 
-        Example output: "This protein bar gives you 20g protein for ₹150.
-        Instead, 2 eggs (₹16) give you 12g protein + Vitamin D."
+        For desserts: wholesome sweet treats (dates, dark chocolate, figs).
+        For sodas/juices: healthy refreshing drinks (coconut water, chaas, nimbu pani).
+        For chips/snacks: healthy crunchy bites (roasted makhana, roasted chana).
+        For protein/fitness: whole-food complete proteins (eggs, paneer, sattu).
         """
         alternatives: list[NaturalAlternative] = []
         nutrition = extraction.nutrition_per_serving
+        category = extraction.product_category or ProductCategory.GENERAL_PACKAGED
 
-        # Check if this product is positioned as a protein source
+        # 1. Desserts & Sweets
+        if category == ProductCategory.DESSERT_SWEET:
+            sweet_alts = NATURAL_ALTERNATIVES["alternatives"].get("sweet_treat", [])
+            for alt in sweet_alts[:3]:
+                alternatives.append(
+                    NaturalAlternative(
+                        nutrient="sweetness without junk",
+                        food_name=alt["food_name"],
+                        quantity=alt["quantity"],
+                        nutrient_amount=alt["nutrient_amount"],
+                        approx_cost_inr=alt.get("approx_cost_inr"),
+                        note=alt.get("note", ""),
+                    )
+                )
+            return alternatives
+
+        # 2. Beverages (Sodas & Packaged Juices)
+        if category in [ProductCategory.BEVERAGE_SODA, ProductCategory.BEVERAGE_JUICE]:
+            bev_alts = NATURAL_ALTERNATIVES["alternatives"].get("refreshing_beverage", [])
+            for alt in bev_alts[:3]:
+                alternatives.append(
+                    NaturalAlternative(
+                        nutrient="natural hydration",
+                        food_name=alt["food_name"],
+                        quantity=alt["quantity"],
+                        nutrient_amount=alt["nutrient_amount"],
+                        approx_cost_inr=alt.get("approx_cost_inr"),
+                        note=alt.get("note", ""),
+                    )
+                )
+            return alternatives
+
+        # 3. Savory Snacks
+        if category == ProductCategory.SAVORY_SNACK:
+            snack_alts = NATURAL_ALTERNATIVES["alternatives"].get("savory_snack", [])
+            for alt in snack_alts[:2]:
+                alternatives.append(
+                    NaturalAlternative(
+                        nutrient="healthy crunch",
+                        food_name=alt["food_name"],
+                        quantity=alt["quantity"],
+                        nutrient_amount=alt["nutrient_amount"],
+                        approx_cost_inr=alt.get("approx_cost_inr"),
+                        note=alt.get("note", ""),
+                    )
+                )
+
+        # 4. Protein / Fitness / High-Protein Items
         is_protein_product = any(
             "protein" in claim.lower() for claim in extraction.claims
         )
-        has_protein = nutrition.protein_g and nutrition.protein_g > 0
+        has_high_protein = (nutrition.protein_g and nutrition.protein_g >= 10)
+        is_protein_category = category in [ProductCategory.PROTEIN_FITNESS, ProductCategory.DAIRY_DAIRY_ALT]
 
-        if is_protein_product or has_protein:
+        if is_protein_product or has_high_protein or is_protein_category:
             protein_alts = NATURAL_ALTERNATIVES["alternatives"].get("protein", [])
-            for alt in protein_alts[:4]:  # Show top 4 alternatives
+            for alt in protein_alts[:3]:
                 alternatives.append(
                     NaturalAlternative(
                         nutrient="protein",
@@ -517,17 +627,32 @@ class Analyzer:
                     )
                 )
 
-        # Check for fiber-related claims or significant fiber
+        # 5. Fiber-rich or fiber-claiming products
         has_fiber_claim = any(
             "fiber" in claim.lower() or "fibre" in claim.lower()
             for claim in extraction.claims
         )
-        if has_fiber_claim:
+        if has_fiber_claim or (nutrition.fiber_g and nutrition.fiber_g >= 3):
             fiber_alts = NATURAL_ALTERNATIVES["alternatives"].get("fiber", [])
             for alt in fiber_alts[:2]:
                 alternatives.append(
                     NaturalAlternative(
                         nutrient="fiber",
+                        food_name=alt["food_name"],
+                        quantity=alt["quantity"],
+                        nutrient_amount=alt["nutrient_amount"],
+                        approx_cost_inr=alt.get("approx_cost_inr"),
+                        note=alt.get("note", ""),
+                    )
+                )
+
+        # Fallback if list is empty
+        if not alternatives:
+            protein_alts = NATURAL_ALTERNATIVES["alternatives"].get("protein", [])
+            for alt in protein_alts[:2]:
+                alternatives.append(
+                    NaturalAlternative(
+                        nutrient="clean whole food",
                         food_name=alt["food_name"],
                         quantity=alt["quantity"],
                         nutrient_amount=alt["nutrient_amount"],
@@ -694,19 +819,18 @@ class Analyzer:
         self, extraction: LabelExtraction, flags: list[IngredientFlag]
     ) -> int:
         """
-        Compute a 1-10 health score.
+        Compute a category-aware 1-10 health score.
 
-        This is a SIMPLIFIED scoring — not a medical assessment.
-        Score starts at 7 (neutral) and adjusts based on:
-        - High-severity ingredient flags → penalty
-        - High sodium/sugar/trans fat → penalty
-        - Good protein/fiber → bonus
-        - Many ingredients (ultra-processed) → penalty
+        A dessert should NOT be penalized for lacking protein.
+        A protein bar SHOULD be held accountable for high protein density.
+        A soda should be penalized for liquid sugar spikes.
+        A savory snack should be scrutinized for sodium and palm oil.
         """
         score = 7.0
         nutrition = extraction.nutrition_per_serving
+        category = extraction.product_category or ProductCategory.GENERAL_PACKAGED
 
-        # Penalty for flagged ingredients
+        # 1. Base Deductions: Flagged Ingredients (Additives, Banned substances)
         for flag in flags:
             if flag.severity == "high":
                 score -= 1.5
@@ -715,43 +839,102 @@ class Analyzer:
             elif flag.severity == "low":
                 score -= 0.25
 
-        # Penalty for excessive sodium
-        if nutrition.sodium_mg and nutrition.sodium_mg > 0:
-            sodium_pct = nutrition.sodium_mg / DAILY_LIMITS["sodium_mg"]
-            if sodium_pct > 0.3:  # >30% daily in one serving
-                score -= 1.5
-            elif sodium_pct > 0.15:
-                score -= 0.75
-
-        # Penalty for excessive sugar
-        if nutrition.sugar_g and nutrition.sugar_g > 0:
-            sugar_pct = nutrition.sugar_g / DAILY_LIMITS["sugar_g"]
-            if sugar_pct > 0.4:  # >40% daily in one serving
-                score -= 1.5
-            elif sugar_pct > 0.2:
-                score -= 0.75
-
-        # Penalty for trans fats
+        # 2. Universal Deduction: Trans Fats (harmful in any category)
         if nutrition.trans_fat_g and nutrition.trans_fat_g > 0:
-            score -= 2.0  # Trans fats are always bad
+            score -= 2.0
 
-        # Bonus for good protein
-        if nutrition.protein_g and nutrition.protein_g > 5:
-            score += 0.5
-        if nutrition.protein_g and nutrition.protein_g > 10:
-            score += 0.5
-
-        # Bonus for fiber
-        if nutrition.fiber_g and nutrition.fiber_g > 3:
-            score += 0.5
-
-        # Penalty for ultra-processing (many ingredients = more processed)
+        # 3. Universal Deduction: Extreme Ultra-Processing (long chemical ingredient lists)
         if len(extraction.ingredients) > 15:
             score -= 1.0
         elif len(extraction.ingredients) > 10:
             score -= 0.5
+        elif len(extraction.ingredients) <= 5 and len(extraction.ingredients) > 0:
+            score += 0.5  # Minimal, clean ingredient list bonus
 
-        # Clamp to 1-10
+        # 4. Category-Specific Scoring Rules
+        if category == ProductCategory.DESSERT_SWEET:
+            # Desserts are sweet treats — evaluate clean indulgence, not protein!
+            # Heavy penalty only if sugar is overwhelming (>25g in a single serving)
+            if nutrition.sugar_g and nutrition.sugar_g > 25:
+                score -= 1.5
+            elif nutrition.sugar_g and nutrition.sugar_g > 15:
+                score -= 0.75
+
+            # Saturated fat penalty (palm fat / vanaspati)
+            if nutrition.saturated_fat_g and nutrition.saturated_fat_g > 10:
+                score -= 1.0
+
+        elif category == ProductCategory.BEVERAGE_SODA:
+            # Liquid sugar rush has zero satiety and spikes glucose instantly
+            if nutrition.sugar_g and nutrition.sugar_g > 20:
+                score -= 2.5
+            elif nutrition.sugar_g and nutrition.sugar_g > 10:
+                score -= 1.5
+
+        elif category == ProductCategory.BEVERAGE_JUICE:
+            # Packaged juice trap: high sugar without the protective fiber of whole fruit
+            if nutrition.sugar_g and nutrition.sugar_g > 15:
+                if not nutrition.fiber_g or nutrition.fiber_g < 1:
+                    score -= 1.5
+                else:
+                    score -= 0.75
+
+        elif category == ProductCategory.SAVORY_SNACK:
+            # Savory snacks are prone to sodium and palm oil traps
+            if nutrition.sodium_mg and nutrition.sodium_mg > 0:
+                sodium_pct = nutrition.sodium_mg / DAILY_LIMITS["sodium_mg"]
+                if sodium_pct > 0.3:  # >600mg per serving
+                    score -= 2.0
+                elif sodium_pct > 0.15:
+                    score -= 1.0
+
+            # Saturated fat / frying oil penalty
+            if nutrition.saturated_fat_g and nutrition.saturated_fat_g > 8:
+                score -= 1.0
+
+            # Fiber bonus for whole snacks (e.g. roasted chana, makhana)
+            if nutrition.fiber_g and nutrition.fiber_g >= 3:
+                score += 0.5
+
+        elif category == ProductCategory.PROTEIN_FITNESS:
+            # Products sold for fitness MUST deliver real protein
+            if nutrition.protein_g and nutrition.protein_g >= 15:
+                score += 1.5
+            elif nutrition.protein_g and nutrition.protein_g >= 8:
+                score += 0.5
+            else:
+                score -= 1.5  # Fitness item failing protein promise
+
+            # Sugar penalty for "fitness" bars loaded with candy sugars
+            if nutrition.sugar_g and nutrition.sugar_g > 10:
+                score -= 1.5
+
+            if nutrition.fiber_g and nutrition.fiber_g >= 3:
+                score += 0.5
+
+        else:
+            # General packaged foods & staples
+            if nutrition.sodium_mg and nutrition.sodium_mg > 0:
+                sodium_pct = nutrition.sodium_mg / DAILY_LIMITS["sodium_mg"]
+                if sodium_pct > 0.3:
+                    score -= 1.5
+                elif sodium_pct > 0.15:
+                    score -= 0.75
+
+            if nutrition.sugar_g and nutrition.sugar_g > 0:
+                sugar_pct = nutrition.sugar_g / DAILY_LIMITS["sugar_g"]
+                if sugar_pct > 0.4:
+                    score -= 1.5
+                elif sugar_pct > 0.2:
+                    score -= 0.75
+
+            if nutrition.protein_g and nutrition.protein_g >= 8:
+                score += 0.5
+
+            if nutrition.fiber_g and nutrition.fiber_g >= 3:
+                score += 0.5
+
+        # Clamp strictly between 1 and 10
         return max(1, min(10, round(score)))
 
     # ========================================================

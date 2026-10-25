@@ -92,10 +92,14 @@ interface ProductAnalysis {
   extraction: {
     product_name?: string;
     brand?: string;
+    product_category?: string;
+    category_reasoning?: string;
     nutrition_per_serving?: NutritionInfo;
     ingredients: ExtractedIngredient[];
     claims: string[];
   };
+  product_category?: string;
+  category_display_name?: string;
   health_score?: number;
   one_line_summary: string;
   detailed_summary: string;
@@ -112,6 +116,7 @@ interface HistoryCard {
   id: number;
   created_at: string;
   product_name: string;
+  product_category?: string;
   brand?: string;
   price_inr?: number;
   health_score?: number;
@@ -394,10 +399,17 @@ export default function Home() {
               {/* Top Score Banner */}
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 flex flex-col md:flex-row items-center justify-between gap-6">
                 <div>
-                  <span className="text-xs font-bold uppercase tracking-wider text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-md">
-                    Audit Result
-                  </span>
-                  <h2 className="text-2xl font-bold text-slate-900 mt-2">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-md">
+                      Audit Result
+                    </span>
+                    {analysis.category_display_name && (
+                      <span className="text-xs font-bold uppercase tracking-wider text-indigo-700 bg-indigo-50 border border-indigo-200/50 px-2.5 py-1 rounded-md">
+                        🏷️ {analysis.category_display_name}
+                      </span>
+                    )}
+                  </div>
+                  <h2 className="text-2xl font-bold text-slate-900 mt-1">
                     {analysis.extraction.product_name || "Packaged Food Product"}
                   </h2>
                   <p className="text-slate-600 mt-1 max-w-xl text-sm">
@@ -677,6 +689,11 @@ export default function Home() {
 
                     {/* Micro badges */}
                     <div className="flex flex-wrap gap-1.5 mt-3">
+                      {item.product_category && (
+                        <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded font-medium border border-indigo-100">
+                          {item.product_category.replace(/_/g, " ")}
+                        </span>
+                      )}
                       {item.price_inr && (
                         <span className="text-[10px] bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-medium">
                           ₹{item.price_inr}

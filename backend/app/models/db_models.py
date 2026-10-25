@@ -31,6 +31,7 @@ class ProductScan(SQLModel, table=True):
 
     # Core Identifiers
     product_name: str = Field(index=True)
+    product_category: Optional[str] = Field(default=None, index=True)
     brand: Optional[str] = Field(default=None)
     price_inr: Optional[float] = Field(default=None)
     health_score: Optional[int] = Field(default=None)
@@ -61,6 +62,7 @@ class ProductScanRead(SQLModel):
     user_id: Optional[str] = None
     created_at: datetime
     product_name: str
+    product_category: Optional[str] = None
     brand: Optional[str] = None
     price_inr: Optional[float] = None
     health_score: Optional[int] = None

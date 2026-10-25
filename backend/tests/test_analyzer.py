@@ -19,6 +19,7 @@ from app.models.schemas import (
     ExtractedIngredient,
     LabelExtraction,
     NutritionInfo,
+    ProductCategory,
 )
 from app.services.analyzer import Analyzer
 
@@ -191,4 +192,81 @@ def test_atwater_calorie_under_reporting_detected(analyzer):
     assert math.is_discrepant is True
     assert math.calculated_calories == 210.0
     assert "Calorie Under-reporting" in math.details
+
+
+def test_dessert_category_does_not_suggest_protein_or_calculate_protein_price(analyzer):
+    """
+    Test category-aware evaluation for Desserts:
+    - Should NOT calculate price per gram of protein
+    - Should NOT suggest eggs, sattu, or chicken
+    - Should suggest wholesome sweet treats (dates, dark chocolate)
+    """
+    extraction = LabelExtraction(
+        product_name="Dark Chocolate Bar",
+        product_category=ProductCategory.DESSERT_SWEET,
+        net_weight_g=100.0,
+        ingredients=[
+            ExtractedIngredient(name="Cocoa Beans"),
+            ExtractedIngredient(name="Cocoa Butter"),
+            ExtractedIngredient(name="Raw Cane Sugar"),
+        ],
+        nutrition_per_serving=NutritionInfo(
+            serving_size_g=25.0,
+            energy_kcal=140.0,
+            protein_g=2.0,      # Small natural protein amount
+            carbohydrates_g=12.0,
+            sugar_g=8.0,
+            total_fat_g=9.0,
+        ),
+    )
+
+    analysis = analyzer.analyze(extraction, price_inr=150.0)
+
+    # 1. Price analysis: protein price should be None!
+    assert analysis.price_analysis is not None
+    assert analysis.price_analysis.price_per_g_protein is None
+
+    # 2. Alternatives: should NOT suggest eggs or sattu!
+    alt_names = [a.food_name.lower() for a in analysis.natural_alternatives]
+    assert not any("egg" in name for name in alt_names)
+    assert not any("sattu" in name for name in alt_names)
+    assert any("dates" in name or "dark chocolate" in name for name in alt_names)
+
+    # 3. Category display name is populated
+    assert analysis.category_display_name == "Dessert & Sweet Treat"
+
+
+def test_beverage_soda_category_alternatives_and_penalty(analyzer):
+    """
+    Test category-aware evaluation for Sodas:
+    - Should heavily penalize liquid sugar (>20g)
+    - Should suggest refreshing beverage alternatives (coconut water, nimbu pani, chaas)
+    """
+    extraction = LabelExtraction(
+        product_name="Cola Fizzy Drink",
+        product_category=ProductCategory.BEVERAGE_SODA,
+        net_weight_g=250.0,
+        ingredients=[
+            ExtractedIngredient(name="Carbonated Water"),
+            ExtractedIngredient(name="Sugar"),
+            ExtractedIngredient(name="Caramel Color (INS 150d)"),
+        ],
+        nutrition_per_serving=NutritionInfo(
+            serving_size_g=250.0,
+            energy_kcal=105.0,
+            protein_g=0.0,
+            carbohydrates_g=26.0,
+            sugar_g=26.0,  # High liquid sugar!
+        ),
+    )
+
+    analysis = analyzer.analyze(extraction, price_inr=40.0)
+
+    # 1. Score should be penalized for extreme liquid sugar
+    assert analysis.health_score <= 4
+
+    # 2. Alternatives should be refreshing drinks
+    alt_names = [a.food_name.lower() for a in analysis.natural_alternatives]
+    assert any("coconut" in name or "chaas" in name or "nimbu" in name for name in alt_names)
+    assert analysis.category_display_name == "Soda & Soft Drink"
 

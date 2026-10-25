@@ -122,6 +122,18 @@ IMPORTANT GUIDELINES:
    - FSSAI license number if visible
 8. If the ingredient list mentions "edible vegetable oil" without specifying type, note it as-is.
 9. Percentage values next to ingredients (e.g., "Wheat flour (65%)") should be captured.
+10. CATEGORY CLASSIFICATION:
+    Classify the product into ONE of these exact categories:
+    - 'protein_fitness': Whey, protein bars, peanut butter, dedicated high-protein snacks
+    - 'staple_grain': Atta, rice, oats, whole-grain breads, plain breakfast cereals
+    - 'dessert_sweet': Chocolates, sweets/mithai, sweet biscuits, cakes, ice creams
+    - 'savory_snack': Chips, namkeen, bhujia, popcorn, instant noodles, fried snacks
+    - 'beverage_juice': Fruit juices, fruit pulps, nectars
+    - 'beverage_soda': Carbonated drinks, colas, energy drinks, sweetened fizzy beverages
+    - 'dairy_dairy_alt': Plain milk, curd/dahi, paneer, tofu, soya milk
+    - 'condiment_sauce': Ketchup, mayo, dips, dressings, jams
+    - 'general_packaged': Any food not fitting the above
+    Provide a concise `category_reasoning` explaining your classification.
 """
 
 
