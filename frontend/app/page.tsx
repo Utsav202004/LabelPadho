@@ -392,7 +392,7 @@ export default function Home() {
         <p className="mt-2.5 text-xs text-slate-500 max-w-xl mx-auto">
           💡 Inspired by the consumer-awareness movements of changemakers like{" "}
           <span className="font-semibold text-slate-700">FoodPharmer (Revant Himatsingka)</span> and{" "}
-          <span className="font-semibold text-slate-700">Glucose Goddess (Jessie Inchauspé)</span>.
+          <span className="font-semibold text-slate-700">Glucose Gal (Pratima Dixit)</span>.
         </p>
 
         {/* Navigation Tabs */}
