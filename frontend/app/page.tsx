@@ -135,6 +135,109 @@ interface HistoryCard {
 // On Vercel: set NEXT_PUBLIC_API_URL to your Render backend URL
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+// Pre-computed instant demo audit for recruiters or quick testing
+const DEMO_AUDIT: ProductAnalysis = {
+  extraction: {
+    product_name: "Nutri-Choice Multigrain Digestive Biscuits",
+    brand: "Britannia Style Sample",
+    product_category: "dessert_sweet",
+    nutrition_per_serving: {
+      serving_size_g: 25,
+      servings_per_package: 4,
+      energy_kcal: 118,
+      protein_g: 2.1,
+      carbohydrates_g: 17.5,
+      sugar_g: 6.2,
+      total_fat_g: 4.4,
+      saturated_fat_g: 2.1,
+      trans_fat_g: 0,
+      sodium_mg: 115,
+      fiber_g: 1.4,
+    },
+    ingredients: [
+      { name: "Refined Wheat Flour (Maida) (54%)" },
+      { name: "Refined Palm Oil" },
+      { name: "Sugar" },
+      { name: "Wheat Flour (Atta) (7%)" },
+      { name: "Rolled Oats (4%)" },
+      { name: "Invert Sugar Syrup" },
+      { name: "Raising Agents (INS 500(ii), INS 503(ii))" },
+    ],
+    claims: ["Multigrain", "Source of Fibre", "0% Trans Fat", "No Palm Oil Disguise"],
+  },
+  product_category: "dessert_sweet",
+  category_display_name: "Dessert & Sweet Treat",
+  health_score: 4,
+  one_line_summary: "Marketed as a wholesome multigrain digestive snack, but 54% refined maida with palm oil and sugar.",
+  detailed_summary: "Despite prominent health marketing and green packaging, Refined Wheat Flour (Maida) forms the overwhelming primary ingredient. The 'multigrain' oats make up only 4% of the cookie. Contains refined palm oil and fast-absorbing invert sugar syrup.",
+  ingredient_flags: [
+    {
+      ingredient_name: "Refined Palm Oil",
+      severity: "medium",
+      flag_type: "health_concern",
+      title: "High Saturated Fat Palm Fat",
+      explanation: "Palm oil is heavily refined and high in saturated palmitic acid, frequently used as a cheap industrial shortening.",
+    },
+    {
+      ingredient_name: "Invert Sugar Syrup",
+      severity: "low",
+      flag_type: "hidden_name",
+      title: "Alternate Liquid Sugar",
+      explanation: "Splits sucrose into glucose and fructose, causing faster blood sugar spikes than whole grains.",
+    },
+  ],
+  claim_verifications: [
+    {
+      claim: "Multigrain",
+      status: "misleading",
+      explanation: "Packaged as 'Multigrain', but the #1 primary ingredient by weight is Refined Wheat Flour (Maida) at 54%. Grains other than wheat make up only 4% (oats).",
+      fssai_rule: "FSSAI Food Safety and Standards (Advertising and Claims) Regulations",
+    },
+    {
+      claim: "Source of Fibre",
+      status: "misleading",
+      explanation: "Provides only 1.4g fiber per serving (5.6% by weight). You would need to consume 4 whole packets to reach your daily fiber goal.",
+      fssai_rule: "FSSAI Schedule I Dietary Fibre Standard",
+    },
+    {
+      claim: "0% Trans Fat",
+      status: "verified",
+      explanation: "Contains 0g trans fatty acids per serving, meeting the FSSAI threshold (< 0.2g).",
+      fssai_rule: "FSSAI Trans Fat Limit Regulations 2022",
+    },
+  ],
+  math_verification: {
+    printed_calories: 118,
+    calculated_calories: 120,
+    discrepancy_percentage: 1.7,
+    is_discrepant: false,
+    details: "Physical calorie balance verified (1.7% variance, within statutory Atwater tolerance).",
+  },
+  price_analysis: {
+    price_inr: 45,
+    value_verdict: "Priced at ₹45. You are paying a 2x premium over basic biscuits primarily for health marketing, not whole grain nutrition.",
+  },
+  natural_alternatives: [
+    {
+      nutrient: "clean sweet craving",
+      food_name: "Medjool Dates with Walnuts",
+      quantity: "2 dates + 3 walnuts",
+      nutrient_amount: "Natural sweetness + 3g fiber + magnesium",
+      approx_cost_inr: 15,
+      note: "No refined flour, zero palm oil, naturally sweet with healthy fats.",
+    },
+    {
+      nutrient: "clean sweet craving",
+      food_name: "Dark Chocolate (75%+ Cacao)",
+      quantity: "20g",
+      nutrient_amount: "Flavonoid antioxidants + only 4g sugar",
+      approx_cost_inr: 25,
+      note: "Low glycemic load compared to sweet biscuits; zero refined starches.",
+    },
+  ],
+  educational_notes: [],
+};
+
 export default function Home() {
   const [activeTab, setActiveTab] = useState<"scan" | "history">("scan");
   
@@ -147,8 +250,24 @@ export default function Home() {
   
   // Loading & states
   const [loading, setLoading] = useState(false);
+  const [loadingMsg, setLoadingMsg] = useState("Preparing label photos...");
   const [error, setError] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<ProductAnalysis | null>(null);
+
+  useEffect(() => {
+    if (!loading) {
+      setLoadingMsg("Preparing label photos...");
+      return;
+    }
+    const t1 = setTimeout(() => setLoadingMsg("Extracting nutrition table & ingredients with Gemini Vision..."), 6000);
+    const t2 = setTimeout(() => setLoadingMsg("Auditing FSSAI front claims, palm oil & Atwater math..."), 15000);
+    const t3 = setTimeout(() => setLoadingMsg("Synthesizing plain-language verdict (cloud container waking up)..."), 28000);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+    };
+  }, [loading]);
 
   // History state
   const [historyList, setHistoryList] = useState<HistoryCard[]>([]);
@@ -175,6 +294,15 @@ export default function Home() {
       loadHistory();
     }
   }, [activeTab]);
+
+  const loadDemoAudit = () => {
+    setError(null);
+    setAnalysis(DEMO_AUDIT);
+    setActiveTab("scan");
+    setTimeout(() => {
+      window.scrollTo({ top: 480, behavior: "smooth" });
+    }, 100);
+  };
 
   const viewPastScan = async (scanId: number) => {
     setLoading(true);
@@ -256,6 +384,11 @@ export default function Home() {
         <p className="mt-3 text-lg text-slate-600 max-w-2xl mx-auto">
           Expose misleading packaged food claims, audit FSSAI compliance, and catch rigged calorie tables.
         </p>
+        <p className="mt-2.5 text-xs text-slate-500 max-w-xl mx-auto">
+          💡 Inspired by the consumer-awareness movements of changemakers like{" "}
+          <span className="font-semibold text-slate-700">FoodPharmer (Revant Himatsingka)</span> and{" "}
+          <span className="font-semibold text-slate-700">Glucose Goddess (Jessie Inchauspé)</span>.
+        </p>
 
         {/* Navigation Tabs */}
         <div className="flex justify-center gap-3 mt-6">
@@ -280,6 +413,19 @@ export default function Home() {
           >
             <History className="w-4 h-4" />
             Scan History
+          </button>
+        </div>
+
+        {/* 1-Click Recruiter Demo Button */}
+        <div className="flex items-center justify-center gap-2 mt-4 text-xs text-slate-500">
+          <span>Reviewing as an interviewer?</span>
+          <button
+            type="button"
+            onClick={loadDemoAudit}
+            className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-semibold rounded-full border border-emerald-200/80 transition cursor-pointer"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+            Click for Instant 1-Second Demo Audit
           </button>
         </div>
       </header>
@@ -376,12 +522,12 @@ export default function Home() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl shadow transition disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+                className="w-full py-3.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl shadow transition disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
               >
                 {loading ? (
                   <>
                     <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    <span>Auditing Label with Multimodal AI...</span>
+                    <span className="text-sm font-medium">{loadingMsg}</span>
                   </>
                 ) : (
                   <>

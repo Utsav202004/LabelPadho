@@ -162,7 +162,7 @@ class GeminiExtractor:
         """
         Normalize any incoming image (including Apple HEIC, TIFF, PNG)
         to a compressed, standardized JPEG. Resizes ultra-high-res images
-        to max 2048px to save bandwidth, tokens, and latency.
+        to max 1400px to optimize bandwidth, tokens, and inference latency.
         """
         try:
             image = Image.open(io.BytesIO(raw_bytes))
@@ -170,13 +170,13 @@ class GeminiExtractor:
             if image.mode != "RGB":
                 image = image.convert("RGB")
 
-            # Downscale if wider/taller than 2048px while keeping aspect ratio
-            max_dim = 2048
+            # Downscale if wider/taller than 1400px while keeping aspect ratio
+            max_dim = 1400
             if max(image.size) > max_dim:
                 image.thumbnail((max_dim, max_dim), Image.Resampling.LANCZOS)
 
             buffer = io.BytesIO()
-            image.save(buffer, format="JPEG", quality=85, optimize=True)
+            image.save(buffer, format="JPEG", quality=75, optimize=True)
             return buffer.getvalue(), "image/jpeg"
         except Exception as e:
             logger.warning(f"Image normalization failed ({e}); using raw bytes")
@@ -189,12 +189,12 @@ class GeminiExtractor:
     ) -> LabelExtraction:
         """
         Extract structured nutrition data from food label images.
-        Automatically retries with exponential backoff and cascades through
-        fallback models if Google reports temporary 503 high demand.
+        Uses asyncio.to_thread to avoid blocking FastAPI's event loop.
+        Cascades cleanly through fallback models without hanging.
         """
         contents: list[types.Part | str] = []
 
-        # 1. Normalize all images to clean JPEG parts
+        # 1. Normalize all images to clean JPEG parts (1400px max, quality 75)
         for raw_bytes in image_bytes_list:
             norm_bytes, norm_mime = self._normalize_image(raw_bytes)
             contents.append(
@@ -214,48 +214,42 @@ class GeminiExtractor:
 
         last_error = None
 
-        # 2. Iterate through model cascade with backoff
+        # Helper function for non-blocking execution in worker thread
+        def _call_model(m_name: str):
+            return self.client.models.generate_content(
+                model=m_name,
+                contents=contents,
+                config=config,
+            )
+
+        # 2. Iterate through model cascade
         for model_name in MODEL_CASCADE:
-            # Try up to 2 attempts per candidate model
-            for attempt in range(2):
-                try:
-                    logger.info(
-                        f"Attempting extraction using model '{model_name}' "
-                        f"(attempt {attempt + 1}/2)..."
-                    )
-                    response = self.client.models.generate_content(
-                        model=model_name,
-                        contents=contents,
-                        config=config,
-                    )
+            try:
+                logger.info(f"Dispatching extraction request to model '{model_name}'...")
+                # Run synchronous GenAI call in a worker thread with 35s timeout
+                response = await asyncio.wait_for(
+                    asyncio.to_thread(_call_model, model_name),
+                    timeout=35.0,
+                )
 
-                    raw_text = response.text
-                    if not raw_text:
-                        raise ValueError("Empty response received from model")
+                raw_text = response.text
+                if not raw_text:
+                    raise ValueError("Empty response received from model")
 
-                    extraction = LabelExtraction.model_validate_json(raw_text)
-                    logger.info(
-                        f"Extraction succeeded using '{model_name}': "
-                        f"{extraction.product_name or 'Unknown Product'}"
-                    )
-                    return extraction
+                extraction = LabelExtraction.model_validate_json(raw_text)
+                logger.info(
+                    f"Extraction succeeded using '{model_name}': "
+                    f"{extraction.product_name or 'Unknown Product'}"
+                )
+                return extraction
 
-                except Exception as e:
-                    last_error = e
-                    err_str = str(e).lower()
-                    logger.warning(
-                        f"Model '{model_name}' attempt {attempt + 1} failed: {e}"
-                    )
-
-                    # If temporary 503 or 429 rate limit, wait briefly before retrying
-                    if "503" in err_str or "unavailable" in err_str or "429" in err_str:
-                        await asyncio.sleep(1.0 * (attempt + 1))
-                    else:
-                        # Non-recoverable error for this model (e.g. 404), break to next model
-                        break
+            except Exception as e:
+                last_error = e
+                logger.warning(f"Model '{model_name}' failed or timed out: {e}")
+                continue
 
         # If all models in the cascade failed, raise the final error
         raise RuntimeError(
-            f"All available vision models failed during high demand. Last error: {last_error}"
+            f"All available vision models failed. Last error: {last_error}"
         )
 
