@@ -1160,6 +1160,287 @@ class Analyzer:
                     )
                 )
 
+        # 5. No Palm Oil / Zero Palm Oil Claim Verification
+        if "palm oil" in combined_text or "no palm" in combined_text or "zero palm" in combined_text or "palm free" in combined_text:
+            # Check what oils/fats are actually present
+            common_oils = [
+                "palmolein", "palm oil", "palm kernel oil",
+                "vanaspati", "hydrogenated vegetable fat", "hydrogenated vegetable oil", "interesterified vegetable fat",
+                "cottonseed oil", "refined cottonseed oil",
+                "refined rice bran oil", "rice bran oil",
+                "refined sunflower oil", "sunflower oil",
+                "refined soybean oil", "soybean oil", "soy oil",
+                "corn oil", "canola oil", "edible vegetable oil",
+                "cold pressed", "wood pressed", "kachi ghani", "mustard oil", "coconut oil", "cow ghee", "desi ghee", "olive oil"
+            ]
+            found_oils = [ing for ing in ingredients_names if any(oil in ing for oil in common_oils)]
+
+            # Check if palm oil was secretly included
+            has_hidden_palm = any(p in ing for ing in ingredients_names for p in ["palmolein", "palm oil", "fractionated palm"])
+            has_vanaspati = any(v in ing for ing in ingredients_names for v in ["vanaspati", "hydrogenated vegetable"])
+
+            if has_hidden_palm:
+                verifications.append(
+                    ClaimVerification(
+                        claim="No Palm Oil",
+                        status="debunked",
+                        explanation=(
+                            "Claims 'No Palm Oil' on package, yet the ingredient list contains "
+                            f"{', '.join([o for o in found_oils if 'palm' in o])}! Direct violation of FSSAI truth-in-advertising."
+                        ),
+                        fssai_rule="FSSAI Food Safety and Standards (Advertising and Claims) Regulations 2018",
+                    )
+                )
+            elif has_vanaspati:
+                verifications.append(
+                    ClaimVerification(
+                        claim="No Palm Oil",
+                        status="misleading",
+                        explanation=(
+                            "Replaced palm oil with Hydrogenated Vegetable Fat (Vanaspati), which is a major source "
+                            "of industrial trans fats and even worse for cardiovascular health than palm oil."
+                        ),
+                        fssai_rule="FSSAI Regulations on Trans Fatty Acids",
+                    )
+                )
+            elif any("cottonseed" in ing for ing in found_oils):
+                verifications.append(
+                    ClaimVerification(
+                        claim="No Palm Oil",
+                        status="misleading",
+                        explanation=(
+                            "Verified free of palm oil, but uses Cottonseed Oil. Cottonseed oil is widely used in Indian "
+                            "namkeens because it is extremely cheap, but it is heavily solvent-extracted (hexane) and "
+                            "naturally contains gossypol before aggressive refining."
+                        ),
+                        fssai_rule="FSSAI Labeling Standards",
+                    )
+                )
+            elif any(s in ing for ing in found_oils for s in ["sunflower", "rice bran", "soybean", "edible vegetable oil"]):
+                oil_name = found_oils[0].title() if found_oils else "Refined Seed Oil"
+                verifications.append(
+                    ClaimVerification(
+                        claim="No Palm Oil",
+                        status="verified",
+                        explanation=(
+                            f"Verified: Free of palm oil. It uses {oil_name}. Note: While lower in saturated "
+                            f"fat than palm oil, ultra-refined seed oils undergo high-heat solvent extraction "
+                            f"and deodorization, and are high in inflammatory Omega-6 linoleic acid. "
+                            f"A clean alternative would be cold-pressed (kachi ghani) oil or desi ghee."
+                        ),
+                        fssai_rule="FSSAI Advertising and Claims Regulations",
+                    )
+                )
+            elif any(c in ing for ing in found_oils for c in ["cold pressed", "wood pressed", "ghee", "olive", "mustard"]):
+                verifications.append(
+                    ClaimVerification(
+                        claim="No Palm Oil",
+                        status="verified",
+                        explanation="Genuinely clean formulation: Free of palm oil and uses unrefined, traditional healthy fats.",
+                        fssai_rule="FSSAI Advertising and Claims Regulations",
+                    )
+                )
+            else:
+                verifications.append(
+                    ClaimVerification(
+                        claim="No Palm Oil",
+                        status="verified",
+                        explanation="No palm oil or palmolein listed in the ingredients.",
+                        fssai_rule="FSSAI Advertising Regulations",
+                    )
+                )
+
+        # 6. "Source of Protein" & "Source of Fibre" Quantification Audit
+        serving_g = nutrition.serving_size_g or 100.0
+
+        # Protein quantification
+        if "protein" in combined_text and ("source of protein" in combined_text or "protein rich" in combined_text or "source of" in combined_text):
+            if nutrition.protein_g is not None:
+                protein_pct_by_weight = (nutrition.protein_g / serving_g) * 100
+                protein_per_100g = (nutrition.protein_g / serving_g) * 100 if serving_g else nutrition.protein_g
+                fssai_min_source = 5.5  # 10% of RDA (55g) per 100g solid food
+
+                if protein_per_100g < fssai_min_source:
+                    verifications.append(
+                        ClaimVerification(
+                            claim="Source of Protein",
+                            status="debunked",
+                            explanation=(
+                                f"FSSAI Schedule I requires solid foods to contain at least 10% of RDA (5.5g per 100g) "
+                                f"to claim 'Source of Protein'. This product has only {protein_per_100g:.1f}g per 100g "
+                                f"({protein_pct_by_weight:.1f}% by weight). That means in 1 serving ({serving_g:.0f}g), "
+                                f"you get just {nutrition.protein_g:.1f}g protein — not a meaningful source."
+                            ),
+                            fssai_rule="FSSAI Food Safety and Standards (Advertising and Claims) Regulations, Schedule I",
+                        )
+                    )
+                elif protein_per_100g < 10.0:
+                    verifications.append(
+                        ClaimVerification(
+                            claim="Source of Protein",
+                            status="misleading",
+                            explanation=(
+                                f"Technically meets FSSAI minimum ({protein_per_100g:.1f}g / 100g, or {protein_pct_by_weight:.1f}% by weight), "
+                                f"but provides only {nutrition.protein_g:.1f}g protein per actual serving ({serving_g:.0f}g). "
+                                f"Almost any grain or nut-based snack has 5-8% protein naturally. This is marketing a basic nutrient as a feature."
+                            ),
+                            fssai_rule="FSSAI Advertising and Claims Regulations (Schedule I: Source of Protein)",
+                        )
+                    )
+                else:
+                    verifications.append(
+                        ClaimVerification(
+                            claim="Source of Protein",
+                            status="verified",
+                            explanation=(
+                                f"Verified: Contains {protein_per_100g:.1f}g protein per 100g ({protein_pct_by_weight:.1f}% by weight), "
+                                f"comfortably exceeding FSSAI's 5.5g/100g threshold."
+                            ),
+                            fssai_rule="FSSAI Schedule I Nutrition Claims",
+                        )
+                    )
+
+        # Fibre quantification
+        if "fibre" in combined_text or "fiber" in combined_text:
+            if "source of fibre" in combined_text or "source of fiber" in combined_text or "good source of fibre" in combined_text or "good source of fiber" in combined_text:
+                if nutrition.fiber_g is not None:
+                    fiber_pct_by_weight = (nutrition.fiber_g / serving_g) * 100
+                    fiber_per_100g = (nutrition.fiber_g / serving_g) * 100 if serving_g else nutrition.fiber_g
+                    fssai_min_fiber = 3.0  # 3g per 100g for solid food
+
+                    if fiber_per_100g < fssai_min_fiber:
+                        verifications.append(
+                            ClaimVerification(
+                                claim="Source of Fibre",
+                                status="debunked",
+                                explanation=(
+                                    f"FSSAI Schedule I mandates at least 3g dietary fibre per 100g to claim 'Source of Fibre'. "
+                                    f"This product contains only {fiber_per_100g:.1f}g per 100g ({fiber_pct_by_weight:.1f}% by weight). "
+                                    f"This fails FSSAI statutory compliance."
+                                ),
+                                fssai_rule="FSSAI Advertising and Claims Regulations (Schedule I: Dietary Fibre)",
+                            )
+                        )
+                    elif fiber_per_100g < 5.0:
+                        verifications.append(
+                            ClaimVerification(
+                                claim="Source of Fibre",
+                                status="misleading",
+                                explanation=(
+                                    f"Barely meets FSSAI minimum of 3g/100g (actual: {fiber_per_100g:.1f}g / 100g, or {fiber_pct_by_weight:.1f}% by weight). "
+                                    f"Per serving ({serving_g:.0f}g), you get just {nutrition.fiber_g:.1f}g of fiber (less than 5% of daily need). "
+                                    f"A single small apple or katori of moong dal gives 4-5x more fiber."
+                                ),
+                                fssai_rule="FSSAI Advertising and Claims Regulations (Schedule I)",
+                            )
+                        )
+                    else:
+                        verifications.append(
+                            ClaimVerification(
+                                claim="Source of Fibre",
+                                status="verified",
+                                explanation=(
+                                    f"Verified: Contains {fiber_per_100g:.1f}g fibre per 100g ({fiber_pct_by_weight:.1f}% by weight), "
+                                    f"meeting FSSAI standards."
+                                ),
+                                fssai_rule="FSSAI Schedule I Nutrition Claims",
+                            )
+                        )
+
+        # 7. "No Added Preservatives" / "Preservative Free" Claim Verification
+        if "no added preservative" in combined_text or "no preservative" in combined_text or "preservative free" in combined_text or "zero preservative" in combined_text:
+            chemical_preservatives = [
+                ("ins 211", "Sodium Benzoate (INS 211)"),
+                ("sodium benzoate", "Sodium Benzoate"),
+                ("ins 202", "Potassium Sorbate (INS 202)"),
+                ("potassium sorbate", "Potassium Sorbate"),
+                ("ins 282", "Calcium Propionate (INS 282)"),
+                ("calcium propionate", "Calcium Propionate"),
+                ("ins 220", "Sulfur Dioxide (INS 220)"),
+                ("ins 222", "Sodium Bisulfite (INS 222)"),
+                ("ins 223", "Sodium Metabisulfite (INS 223)"),
+                ("ins 224", "Potassium Metabisulfite (INS 224)"),
+                ("ins 249", "Potassium Nitrite (INS 249)"),
+                ("ins 250", "Sodium Nitrite (INS 250)"),
+                ("ins 319", "TBHQ (INS 319)"),
+                ("tbhq", "TBHQ (Tertiary Butylhydroquinone)"),
+                ("ins 320", "BHA (INS 320)"),
+                ("bha", "BHA (Butylated Hydroxyanisole)"),
+                ("ins 321", "BHT (INS 321)"),
+                ("bht", "BHT (Butylated Hydroxytoluene)"),
+            ]
+            found_preservatives = [label for key, label in chemical_preservatives if any(key in ing for ing in ingredients_names)]
+
+            if found_preservatives:
+                verifications.append(
+                    ClaimVerification(
+                        claim="No Added Preservatives",
+                        status="debunked",
+                        explanation=(
+                            f"Claims 'No Added Preservatives', but the ingredients list clearly reveals "
+                            f"{', '.join(found_preservatives)}! These are synthetic chemical preservatives/antioxidants "
+                            f"used to artificially extend shelf life. This is a misleading label."
+                        ),
+                        fssai_rule="FSSAI Food Safety and Standards (Packaging and Labelling) Regulations",
+                    )
+                )
+            else:
+                has_high_sodium = nutrition.sodium_mg and nutrition.sodium_mg > 400
+                if has_high_sodium:
+                    verifications.append(
+                        ClaimVerification(
+                            claim="No Added Preservatives",
+                            status="verified",
+                            explanation=(
+                                f"Verified: No Class II chemical preservatives (like Sodium Benzoate or Sorbates). "
+                                f"However, notice the high sodium content ({nutrition.sodium_mg:.0f}mg per serving) and acidity regulators, "
+                                f"which act as natural curing and preservation agents to maintain stability."
+                            ),
+                            fssai_rule="FSSAI Packaging and Labelling Regulations",
+                        )
+                    )
+                else:
+                    verifications.append(
+                        ClaimVerification(
+                            claim="No Added Preservatives",
+                            status="verified",
+                            explanation="Verified: Clean preservation profile with zero synthetic chemical preservatives (INS 200-299 series).",
+                            fssai_rule="FSSAI Packaging and Labelling Regulations",
+                        )
+                    )
+
+        # 8. "Cholesterol Free" Claim Verification
+        if "cholesterol free" in combined_text or "0% cholesterol" in combined_text or "zero cholesterol" in combined_text or "no cholesterol" in combined_text:
+            animal_derivatives = ["milk", "dairy", "butter", "cheese", "ghee", "egg", "meat", "poultry", "fish", "whey", "casein"]
+            is_animal_product = any(a in ing for ing in ingredients_names for a in animal_derivatives)
+
+            if is_animal_product:
+                verifications.append(
+                    ClaimVerification(
+                        claim="Cholesterol Free",
+                        status="misleading",
+                        explanation=(
+                            "Product contains dairy or animal-derived ingredients which naturally contain dietary cholesterol. "
+                            "Check if stated cholesterol per 100g is strictly under 5mg per FSSAI limits."
+                        ),
+                        fssai_rule="FSSAI Schedule I Nutritional Claims",
+                    )
+                )
+            else:
+                verifications.append(
+                    ClaimVerification(
+                        claim="Cholesterol Free",
+                        status="misleading",
+                        explanation=(
+                            "Technically true, but misleading marketing: Cholesterol is biologically synthesized exclusively "
+                            "in animal livers. All 100% plant-based foods (wheat, rice, corn, nuts, vegetable oils) "
+                            "naturally have ZERO cholesterol by definition of nature. Advertising a plant-based food as "
+                            "'Cholesterol Free' creates a false health halo for a universal biological fact."
+                        ),
+                        fssai_rule="FSSAI Advertising and Claims Regulations (Deceptive Health Claims)",
+                    )
+                )
+
         return verifications
 
     # ========================================================

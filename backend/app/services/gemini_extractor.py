@@ -114,7 +114,11 @@ IMPORTANT GUIDELINES:
 3. If a value is not visible, not legible, or not present, use null.
 4. Indian labels often show nutrition per serving AND per 100g — extract both if available.
 5. The label may be in English, Hindi, or mixed — extract everything regardless of language.
-6. Look for ALL marketing claims (e.g., "High Protein", "Sugar Free", "Baked Not Fried").
+6. Look for ALL marketing claims on the front, back, and sides of the package.
+   Examples: "No Palm Oil", "Zero Palm Oil", "Source of Protein", "Source of Fibre", "Good Source of Fiber",
+   "Cholesterol Free", "0% Cholesterol", "No Added Preservatives", "Preservative Free", "Zero Trans Fat",
+   "High Protein", "No Added Sugar", "Baked Not Fried", "100% Whole Wheat", "Multigrain".
+   Always extract every single claim found into the `claims` list.
 7. Pay special attention to:
    - Serving size vs package size (labels often use tiny serving sizes)
    - Trans fat content (may be hidden or listed as 0 due to rounding)

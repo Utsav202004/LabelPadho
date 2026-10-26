@@ -270,3 +270,74 @@ def test_beverage_soda_category_alternatives_and_penalty(analyzer):
     assert any("coconut" in name or "chaas" in name or "nimbu" in name for name in alt_names)
     assert analysis.category_display_name == "Soda & Soft Drink"
 
+
+def test_no_palm_oil_claim_replacement_audit(analyzer):
+    """
+    Test 'No Palm Oil' claim verification:
+    If manufacturer replaced palm oil with cottonseed or sunflower oil,
+    verify that it confirms absence of palm oil while auditing the replacement oil.
+    """
+    extraction = LabelExtraction(
+        product_name="Crunchy Namkeen",
+        claims=["No Palm Oil", "Cholesterol Free"],
+        ingredients=[
+            ExtractedIngredient(name="Besan (Gram Flour)"),
+            ExtractedIngredient(name="Refined Sunflower Oil"),
+            ExtractedIngredient(name="Iodized Salt"),
+        ],
+        nutrition_per_serving=NutritionInfo(serving_size_g=30.0, energy_kcal=150.0),
+    )
+
+    analysis = analyzer.analyze(extraction)
+    palm_check = next((c for c in analysis.claim_verifications if c.claim == "No Palm Oil"), None)
+    assert palm_check is not None
+    assert palm_check.status == "verified"
+    assert "Sunflower" in palm_check.explanation or "seed oil" in palm_check.explanation
+
+    choles_check = next((c for c in analysis.claim_verifications if c.claim == "Cholesterol Free"), None)
+    assert choles_check is not None
+    assert choles_check.status == "misleading"
+    assert "plant-based" in choles_check.explanation
+
+
+def test_source_of_protein_and_fibre_quantification(analyzer):
+    """
+    Test quantification of 'Source of Protein' and 'Source of Fibre':
+    If a 30g snack has only 1g protein (3.3g/100g), it fails the 5.5g/100g FSSAI threshold.
+    """
+    extraction = LabelExtraction(
+        product_name="P4 Style Snack",
+        claims=["Source of Protein", "Source of Fibre", "No Added Preservatives"],
+        ingredients=[
+            ExtractedIngredient(name="Corn Flour"),
+            ExtractedIngredient(name="Rice Flour"),
+            ExtractedIngredient(name="TBHQ (INS 319)"),  # Synthetic preservative/antioxidant!
+        ],
+        nutrition_per_serving=NutritionInfo(
+            serving_size_g=30.0,
+            energy_kcal=130.0,
+            protein_g=1.0,  # 3.3g/100g -> fails FSSAI 5.5g threshold
+            fiber_g=0.6,    # 2.0g/100g -> fails FSSAI 3.0g threshold
+        ),
+    )
+
+    analysis = analyzer.analyze(extraction)
+    
+    # 1. Protein check should be debunked (fails 5.5g/100g)
+    protein_check = next((c for c in analysis.claim_verifications if c.claim == "Source of Protein"), None)
+    assert protein_check is not None
+    assert protein_check.status == "debunked"
+    assert "3.3g per 100g" in protein_check.explanation
+
+    # 2. Fibre check should be debunked (fails 3.0g/100g)
+    fibre_check = next((c for c in analysis.claim_verifications if c.claim == "Source of Fibre"), None)
+    assert fibre_check is not None
+    assert fibre_check.status == "debunked"
+    assert "2.0g per 100g" in fibre_check.explanation
+
+    # 3. Preservative check should be debunked because of TBHQ (INS 319)
+    preservative_check = next((c for c in analysis.claim_verifications if c.claim == "No Added Preservatives"), None)
+    assert preservative_check is not None
+    assert preservative_check.status == "debunked"
+    assert "TBHQ" in preservative_check.explanation
+
