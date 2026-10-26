@@ -26,10 +26,12 @@ interface NutritionInfo {
   protein_g?: number;
   carbohydrates_g?: number;
   sugar_g?: number;
+  added_sugar_g?: number;
   total_fat_g?: number;
   saturated_fat_g?: number;
   trans_fat_g?: number;
   sodium_mg?: number;
+  fiber_g?: number;
 }
 
 interface ExtractedIngredient {
@@ -42,6 +44,7 @@ interface IngredientFlag {
   ingredient_name: string;
   severity: "high" | "medium" | "low" | "info";
   flag_type: string;
+  title?: string;
   explanation: string;
   regulatory_source?: string;
 }
@@ -62,10 +65,12 @@ interface MathVerification {
 }
 
 interface NaturalAlternative {
+  nutrient?: string;
   food_name: string;
   quantity: string;
   nutrient_amount: string;
   approx_cost_inr?: number;
+  note?: string;
   diet_type?: string;
 }
 
