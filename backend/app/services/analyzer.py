@@ -1441,6 +1441,79 @@ class Analyzer:
                     )
                 )
 
+        # 9. "No Added Maida" / "Maida Free" / "Zero Maida" Claim Verification
+        if "maida" in combined_text and ("no " in combined_text or "zero" in combined_text or "free" in combined_text or "without" in combined_text):
+            has_maida = any(m in ing for ing in ingredients_names for m in ["maida", "refined wheat flour", "wheat flour (refined)"])
+            starches = ["maltodextrin", "tapioca starch", "corn starch", "potato starch", "modified starch"]
+            found_starches = [s for s in starches if any(s in ing for ing in ingredients_names)]
+
+            if has_maida:
+                verifications.append(
+                    ClaimVerification(
+                        claim="No Added Maida",
+                        status="debunked",
+                        explanation="Claims 'No Added Maida', yet ingredients list clearly contains Refined Wheat Flour (Maida). Direct FSSAI violation.",
+                        fssai_rule="FSSAI Advertising and Claims Regulations 2018",
+                    )
+                )
+            elif found_starches:
+                verifications.append(
+                    ClaimVerification(
+                        claim="No Added Maida",
+                        status="misleading",
+                        explanation=(
+                            f"Verified free of maida, but heavily padded with refined starches: {', '.join(found_starches)}. "
+                            f"These refined starches have a glycemic index (GI 90-110) even higher than table sugar, spiking insulin rapidly."
+                        ),
+                        fssai_rule="FSSAI Packaging and Labelling Guidelines",
+                    )
+                )
+            else:
+                verifications.append(
+                    ClaimVerification(
+                        claim="No Added Maida",
+                        status="verified",
+                        explanation="Clean grain profile: Free of refined wheat flour (maida) and uses whole grains or clean flours.",
+                        fssai_rule="FSSAI Food Safety Regulations",
+                    )
+                )
+
+        # 10. "Loaded with Nuts" / "Nuts & Seeds" Prominence Audit
+        if "nut" in combined_text and ("loaded" in combined_text or "rich" in combined_text or "power" in combined_text or "packed" in combined_text):
+            nuts = ["almond", "cashew", "pista", "walnut", "peanut", "hazelnut", "chia", "flax", "pumpkin seed", "sunflower seed"]
+            found_nut_ingredients = [ing for ing in ingredients_names if any(n in ing for n in nuts)]
+
+            if not found_nut_ingredients:
+                verifications.append(
+                    ClaimVerification(
+                        claim="Loaded with Nuts",
+                        status="debunked",
+                        explanation="Front package claims 'Loaded with Nuts', but zero nuts or seeds are listed in the ingredients!",
+                        fssai_rule="FSSAI Regulation on Front-of-Pack Product Naming",
+                    )
+                )
+            else:
+                verifications.append(
+                    ClaimVerification(
+                        claim="Loaded with Nuts",
+                        status="misleading",
+                        explanation=(
+                            f"Claims to be loaded with nuts, but actual ingredients list reveals: {', '.join(found_nut_ingredients[:3])}. "
+                            f"Under FSSAI rules, check the percentage in brackets — often hero nuts make up less than 5% of total package weight."
+                        ),
+                        fssai_rule="FSSAI Food Safety and Standards (Advertising and Claims) Regulations 2018",
+                    )
+                )
+
+        # Merge dynamic LLM claim audits with deterministic Python FSSAI audits
+        # Python audits take priority for known statutory rules (protein %, palm oil, math, preservatives)
+        dynamic_claims = extraction.raw_claims_audit or []
+        existing_claim_names = {v.claim.lower() for v in verifications}
+        for dc in dynamic_claims:
+            if not any(dc.claim.lower() in ec or ec in dc.claim.lower() for ec in existing_claim_names):
+                verifications.append(dc)
+                existing_claim_names.add(dc.claim.lower())
+
         return verifications
 
     # ========================================================

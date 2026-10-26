@@ -341,3 +341,60 @@ def test_source_of_protein_and_fibre_quantification(analyzer):
     assert preservative_check.status == "debunked"
     assert "TBHQ" in preservative_check.explanation
 
+
+def test_p2_sample_no_maida_and_nuts_audit(analyzer):
+    """
+    Test P2 sample claims:
+    - 'No Added Maida' with hidden tapioca/corn starches -> misleading
+    - 'Loaded with Nuts' with < 5% almonds -> audited
+    """
+    extraction = LabelExtraction(
+        product_name="P2 Super Cookie",
+        claims=["No Added Maida", "Loaded with Nuts"],
+        ingredients=[
+            ExtractedIngredient(name="Whole Wheat Flour"),
+            ExtractedIngredient(name="Tapioca Starch"),
+            ExtractedIngredient(name="Almonds (3%)"),
+        ],
+        nutrition_per_serving=NutritionInfo(serving_size_g=50.0, energy_kcal=220.0),
+    )
+
+    analysis = analyzer.analyze(extraction)
+    maida_check = next((c for c in analysis.claim_verifications if c.claim == "No Added Maida"), None)
+    assert maida_check is not None
+    assert maida_check.status == "misleading"
+    assert "tapioca starch" in maida_check.explanation
+
+    nuts_check = next((c for c in analysis.claim_verifications if c.claim == "Loaded with Nuts"), None)
+    assert nuts_check is not None
+    assert nuts_check.status == "misleading"
+    assert "Almonds" in nuts_check.explanation
+
+
+def test_dynamic_unseen_marketing_claims_are_preserved(analyzer):
+    """
+    Ensure that arbitrary, unseen marketing claims generated dynamically by the LLM
+    (e.g., 'Brain Booster', 'Guilt-Free Munching') are preserved and not lost.
+    """
+    from app.models.schemas import ClaimVerification
+
+    extraction = LabelExtraction(
+        product_name="Futuristic Snack",
+        claims=["Brain Booster"],
+        raw_claims_audit=[
+            ClaimVerification(
+                claim="Brain Booster",
+                status="debunked",
+                explanation="No recognized cognitive enhancement nutrients present in the ingredients list.",
+                fssai_rule="FSSAI Misleading Claims Section 24",
+            )
+        ],
+        nutrition_per_serving=NutritionInfo(serving_size_g=30.0, energy_kcal=120.0),
+    )
+
+    analysis = analyzer.analyze(extraction)
+    unseen_check = next((c for c in analysis.claim_verifications if c.claim == "Brain Booster"), None)
+    assert unseen_check is not None
+    assert unseen_check.status == "debunked"
+    assert "cognitive" in unseen_check.explanation
+

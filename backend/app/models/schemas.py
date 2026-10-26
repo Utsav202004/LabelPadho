@@ -171,7 +171,15 @@ class LabelExtraction(BaseModel):
     )
     claims: list[str] = Field(
         default_factory=list,
-        description="Marketing claims on the package (e.g., 'High Protein', 'No Added Sugar', 'Baked Not Fried')"
+        description="Marketing claims on the package (e.g., 'High Protein', 'No Added Sugar', 'Loaded with Nuts')"
+    )
+    raw_claims_audit: list[ClaimVerification] = Field(
+        default_factory=list,
+        description=(
+            "Cross-examination of every marketing claim found on the packaging against the actual "
+            "ingredients and nutrition table. Assign status ('verified', 'misleading', or 'debunked') "
+            "with a crisp 1-sentence reality check."
+        )
     )
     fssai_license: str | None = Field(
         None,

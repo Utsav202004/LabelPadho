@@ -138,6 +138,13 @@ IMPORTANT GUIDELINES:
     - 'condiment_sauce': Ketchup, mayo, dips, dressings, jams
     - 'general_packaged': Any food not fitting the above
     Provide a concise `category_reasoning` explaining your classification.
+11. DYNAMIC MARKETING CLAIM AUDIT (`raw_claims_audit`):
+    For EVERY marketing claim visible on the packaging (e.g. "Loaded with Nuts", "No Added Maida", "Power of Protein & Fibre", "Source of Calcium", "100% Real", "Guilt Free"):
+    Cross-examine it against the actual ingredients list and nutrition numbers:
+    - If claim says "Loaded with Nuts", check declared nut percentages in ingredients (e.g., Almonds 2%).
+    - If claim says "No Added Maida", check if refined starches, maltodextrin, or refined flours are substituted.
+    - If claim says "Protein/Fibre Rich", check actual grams in the nutrition table.
+    - Assign status ('verified', 'misleading', or 'debunked') with a concise 1-sentence reality check.
 """
 
 
