@@ -121,11 +121,13 @@ IMPORTANT GUIDELINES:
    Always extract every single claim found into the `claims` list.
 7. Pay special attention to:
    - Serving size vs package size (labels often use tiny serving sizes)
+   - The exact serving wording (for example, "1 biscuit" or "2 cookies") in `serving_unit_description`
    - Trans fat content (may be hidden or listed as 0 due to rounding)
    - Type of oil used (often buried in ingredients list)
    - FSSAI license number if visible
 8. If the ingredient list mentions "edible vegetable oil" without specifying type, note it as-is.
 9. Percentage values next to ingredients (e.g., "Wheat flour (65%)") should be captured.
+   - Always capture the product name exactly as printed, including words such as "creme" or "crème".
 10. CATEGORY CLASSIFICATION:
     Classify the product into ONE of these exact categories:
     - 'protein_fitness': Whey, protein bars, peanut butter, dedicated high-protein snacks

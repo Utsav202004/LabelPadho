@@ -88,6 +88,11 @@ async def analyze_label(
         None,
         description="Product price in INR (Optional - calculates price-per-gram-protein vs eggs/chana)"
     ),
+    expected_consumption_g: float | None = Form(
+        None,
+        gt=0,
+        description="How many grams the user expects to eat (Optional; scales nutrition to a realistic portion)"
+    ),
     # Optional user ID for learning system
     user_id: str | None = Form(
         None,
@@ -168,6 +173,7 @@ async def analyze_label(
             extraction=extraction,
             price_inr=price,
             learned_topics=learned_topics,
+            expected_consumption_g=expected_consumption_g,
         )
     except Exception as e:
         logger.error(f"Analysis failed: {e}")

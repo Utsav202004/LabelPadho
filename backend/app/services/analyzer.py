@@ -160,6 +160,7 @@ class Analyzer:
         extraction: LabelExtraction,
         price_inr: float | None = None,
         learned_topics: set[str] | None = None,
+        expected_consumption_g: float | None = None,
     ) -> ProductAnalysis:
         """
         Run all analysis layers on the extracted label data.
@@ -175,7 +176,7 @@ class Analyzer:
 
         # Run each analysis layer independently
         flags = self._flag_ingredients(extraction)
-        serving = self._analyze_serving_size(extraction)
+        serving = self._analyze_serving_size(extraction, expected_consumption_g)
         price = self._analyze_price(extraction, price_inr) if price_inr else None
         alternatives = self._suggest_alternatives(extraction, price_inr)
         edu_notes = self._generate_educational_notes(extraction, flags, learned_topics)
@@ -253,10 +254,13 @@ class Analyzer:
         # "Crème" is a product-style word, not proof that a filling contains dairy cream.
         # We only call this out when the label itself supports that reading: the product
         # name uses creme/crème, vegetable oil is listed, and dairy cream is not listed.
-        product_name = (extraction.product_name or "").lower()
-        has_creme_name = "creme" in product_name or "crème" in product_name
+        visible_product_text = " ".join([extraction.product_name or "", *extraction.claims]).lower()
+        has_creme_name = "creme" in visible_product_text or "crème" in visible_product_text
         has_vegetable_oil = any(
-            "vegetable oil" in name or "palm oil" in name
+            any(oil in name for oil in [
+                "vegetable oil", "palm oil", "palmolein", "palm olein", "refined oil",
+                "hydrogenated vegetable fat", "vegetable fat",
+            ])
             for name in (ingredient.name.lower() for ingredient in extraction.ingredients)
         )
         has_dairy_cream = any(
@@ -302,7 +306,7 @@ class Analyzer:
     # ========================================================
 
     def _analyze_serving_size(
-        self, extraction: LabelExtraction
+        self, extraction: LabelExtraction, expected_consumption_g: float | None = None
     ) -> ServingReality | None:
         """
         Expose the 'serving size trap'.
@@ -323,75 +327,57 @@ class Analyzer:
         package_g = extraction.net_weight_g
         servings = nutrition.servings_per_package
 
-        # Need at least serving size and package weight to analyze
-        if not serving_g or not package_g:
+        # We need a stated serving to scale a label. Package weight and the
+        # user's expected portion are optional, independent ways to add context.
+        if not serving_g:
             return None
 
+        def scaled_nutrition(amount_g: float, multiplier: float) -> NutritionInfo:
+            fields = [
+                "energy_kcal", "protein_g", "total_fat_g", "saturated_fat_g",
+                "trans_fat_g", "carbohydrates_g", "sugar_g", "added_sugar_g",
+                "fiber_g", "sodium_mg",
+            ]
+            scaled = {
+                field: round(value * multiplier, 1)
+                if (value := getattr(nutrition, field)) is not None
+                else None
+                for field in fields
+            }
+            return NutritionInfo(serving_size_g=amount_g, servings_per_package=1, **scaled)
+
         # Calculate number of servings if not explicitly stated
-        if not servings:
+        if package_g and not servings:
             servings = round(package_g / serving_g, 1) if serving_g > 0 else None
 
         # Build the "full package" nutrition by multiplying
         full_package_nutrition = None
         if servings and servings > 1:
             multiplier = servings
-            full_package_nutrition = NutritionInfo(
-                serving_size_g=package_g,
-                servings_per_package=1,
-                energy_kcal=(
-                    round(nutrition.energy_kcal * multiplier, 1)
-                    if nutrition.energy_kcal
-                    else None
-                ),
-                protein_g=(
-                    round(nutrition.protein_g * multiplier, 1)
-                    if nutrition.protein_g
-                    else None
-                ),
-                total_fat_g=(
-                    round(nutrition.total_fat_g * multiplier, 1)
-                    if nutrition.total_fat_g
-                    else None
-                ),
-                saturated_fat_g=(
-                    round(nutrition.saturated_fat_g * multiplier, 1)
-                    if nutrition.saturated_fat_g
-                    else None
-                ),
-                trans_fat_g=(
-                    round(nutrition.trans_fat_g * multiplier, 1)
-                    if nutrition.trans_fat_g
-                    else None
-                ),
-                carbohydrates_g=(
-                    round(nutrition.carbohydrates_g * multiplier, 1)
-                    if nutrition.carbohydrates_g
-                    else None
-                ),
-                sugar_g=(
-                    round(nutrition.sugar_g * multiplier, 1)
-                    if nutrition.sugar_g
-                    else None
-                ),
-                added_sugar_g=(
-                    round(nutrition.added_sugar_g * multiplier, 1)
-                    if nutrition.added_sugar_g
-                    else None
-                ),
-                fiber_g=(
-                    round(nutrition.fiber_g * multiplier, 1)
-                    if nutrition.fiber_g
-                    else None
-                ),
-                sodium_mg=(
-                    round(nutrition.sodium_mg * multiplier, 1)
-                    if nutrition.sodium_mg
-                    else None
-                ),
+            full_package_nutrition = scaled_nutrition(package_g, multiplier)
+
+        expected_nutrition = None
+        if expected_consumption_g and expected_consumption_g > 0:
+            expected_nutrition = scaled_nutrition(
+                expected_consumption_g, expected_consumption_g / serving_g
             )
 
         # Generate a plain-language note
         realistic = ""
+        if expected_nutrition:
+            details = []
+            if expected_nutrition.energy_kcal is not None:
+                details.append(f"{expected_nutrition.energy_kcal:.0f} kcal")
+            if expected_nutrition.added_sugar_g is not None:
+                details.append(f"{expected_nutrition.added_sugar_g:.1f}g added sugar")
+            elif expected_nutrition.sugar_g is not None:
+                details.append(f"{expected_nutrition.sugar_g:.1f}g sugar")
+            if expected_nutrition.sodium_mg is not None:
+                details.append(f"{expected_nutrition.sodium_mg:.0f}mg sodium")
+            realistic = (
+                f"For the {expected_consumption_g:g}g you said you would eat, that is "
+                + ", ".join(details) + "."
+            )
         if servings and servings > 1.5:
             serving_description = nutrition.serving_unit_description
             serving_label = (
@@ -399,14 +385,14 @@ class Analyzer:
                 if serving_description
                 else f"{serving_g}g"
             )
-            realistic = (
+            package_note = (
                 f"The label shows nutrition for a {serving_label} serving, "
                 f"but the full packet is {package_g}g "
                 f"({servings:.0f} servings). "
                 f"Most people eat more than one serving in a sitting."
             )
             if serving_g <= 10 and servings >= 4:
-                realistic += (
+                package_note += (
                     " This is a very small stated serving for a multi-piece snack, "
                     "so compare the full-packet figures before deciding."
                 )
@@ -440,14 +426,17 @@ class Analyzer:
                         f"sugar ({pct}% of your daily limit)"
                     )
                 if warnings:
-                    realistic += " ⚠️ " + ". ".join(warnings) + "."
+                    package_note += " ⚠️ " + ". ".join(warnings) + "."
+            realistic = f"{realistic} {package_note}".strip()
 
         return ServingReality(
             stated_serving_g=serving_g,
             package_weight_g=package_g,
             servings_in_package=servings,
+            expected_consumption_g=expected_consumption_g,
             realistic_consumption=realistic,
             nutrition_full_package=full_package_nutrition,
+            nutrition_for_expected_consumption=expected_nutrition,
         )
 
     # ========================================================
@@ -582,6 +571,16 @@ class Analyzer:
     # Analysis Layer 4: Natural Alternatives
     # ========================================================
 
+    def _select_alternatives(
+        self, category_key: str, count: int, product_name: str | None
+    ) -> list[dict]:
+        """Pick a stable, varied subset so every scan does not show the same swaps."""
+        options = NATURAL_ALTERNATIVES["alternatives"].get(category_key, [])
+        if len(options) <= count:
+            return options
+        offset = sum(ord(character) for character in (product_name or category_key)) % len(options)
+        return [options[(offset + index) % len(options)] for index in range(count)]
+
     def _suggest_alternatives(
         self,
         extraction: LabelExtraction,
@@ -601,8 +600,7 @@ class Analyzer:
 
         # 1. Desserts & Sweets
         if category == ProductCategory.DESSERT_SWEET:
-            sweet_alts = NATURAL_ALTERNATIVES["alternatives"].get("sweet_treat", [])
-            for alt in sweet_alts[:3]:
+            for alt in self._select_alternatives("sweet_treat", 3, extraction.product_name):
                 alternatives.append(
                     NaturalAlternative(
                         nutrient="sweetness without junk",
@@ -617,8 +615,7 @@ class Analyzer:
 
         # 2. Beverages (Sodas & Packaged Juices)
         if category in [ProductCategory.BEVERAGE_SODA, ProductCategory.BEVERAGE_JUICE]:
-            bev_alts = NATURAL_ALTERNATIVES["alternatives"].get("refreshing_beverage", [])
-            for alt in bev_alts[:3]:
+            for alt in self._select_alternatives("refreshing_beverage", 3, extraction.product_name):
                 alternatives.append(
                     NaturalAlternative(
                         nutrient="natural hydration",
@@ -633,8 +630,7 @@ class Analyzer:
 
         # 3. Savory Snacks
         if category == ProductCategory.SAVORY_SNACK:
-            snack_alts = NATURAL_ALTERNATIVES["alternatives"].get("savory_snack", [])
-            for alt in snack_alts[:2]:
+            for alt in self._select_alternatives("savory_snack", 3, extraction.product_name):
                 alternatives.append(
                     NaturalAlternative(
                         nutrient="healthy crunch",
@@ -654,8 +650,7 @@ class Analyzer:
         is_protein_category = category in [ProductCategory.PROTEIN_FITNESS, ProductCategory.DAIRY_DAIRY_ALT]
 
         if is_protein_product or has_high_protein or is_protein_category:
-            protein_alts = NATURAL_ALTERNATIVES["alternatives"].get("protein", [])
-            for alt in protein_alts[:3]:
+            for alt in self._select_alternatives("protein", 3, extraction.product_name):
                 alternatives.append(
                     NaturalAlternative(
                         nutrient="protein",
@@ -673,26 +668,10 @@ class Analyzer:
             for claim in extraction.claims
         )
         if has_fiber_claim or (nutrition.fiber_g and nutrition.fiber_g >= 3):
-            fiber_alts = NATURAL_ALTERNATIVES["alternatives"].get("fiber", [])
-            for alt in fiber_alts[:2]:
+            for alt in self._select_alternatives("fiber", 2, extraction.product_name):
                 alternatives.append(
                     NaturalAlternative(
                         nutrient="fiber",
-                        food_name=alt["food_name"],
-                        quantity=alt["quantity"],
-                        nutrient_amount=alt["nutrient_amount"],
-                        approx_cost_inr=alt.get("approx_cost_inr"),
-                        note=alt.get("note", ""),
-                    )
-                )
-
-        # Fallback if list is empty
-        if not alternatives:
-            protein_alts = NATURAL_ALTERNATIVES["alternatives"].get("protein", [])
-            for alt in protein_alts[:2]:
-                alternatives.append(
-                    NaturalAlternative(
-                        nutrient="clean whole food",
                         food_name=alt["food_name"],
                         quantity=alt["quantity"],
                         nutrient_amount=alt["nutrient_amount"],
@@ -722,6 +701,7 @@ class Analyzer:
         """
         notes: list[EducationalNote] = []
         nutrition = extraction.nutrition_per_serving
+        category = extraction.product_category or ProductCategory.GENERAL_PACKAGED
 
         # --- Sodium awareness ---
         if (
@@ -824,6 +804,27 @@ class Analyzer:
                         f"package is {extraction.net_weight_g}g "
                         f"({extraction.net_weight_g / nutrition.serving_size_g:.0f} servings)"
                     ),
+                )
+            )
+
+        # --- Craving-aware swaps (not a diagnosis) ---
+        if (
+            "craving_aware_swap" not in learned_topics
+            and category in [ProductCategory.DESSERT_SWEET, ProductCategory.BEVERAGE_SODA, ProductCategory.BEVERAGE_JUICE]
+            and nutrition.sugar_g
+            and nutrition.sugar_g >= 8
+        ):
+            notes.append(
+                EducationalNote(
+                    topic_id="craving_aware_swap",
+                    title="A craving is a cue, not a nutrient-deficiency test",
+                    explanation=(
+                        "Sweet cravings can be shaped by habit, skipped meals, sleep, stress, and easy availability. "
+                        "They do not reliably prove a vitamin or mineral deficiency. A more useful response is to "
+                        "pair a sweet choice with fibre or protein—for example fruit with nuts, curd, or a small "
+                        "portion of dark chocolate—rather than treating the craving as a diagnosis."
+                    ),
+                    triggered_by=f"This {category.value.replace('_', ' ')} has {nutrition.sugar_g:.0f}g sugar per serving",
                 )
             )
 

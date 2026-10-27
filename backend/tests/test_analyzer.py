@@ -101,12 +101,15 @@ def test_tiny_single_biscuit_serving_exposes_full_packet_sugar(analyzer):
         ),
     )
 
-    analysis = analyzer.analyze(extraction)
+    analysis = analyzer.analyze(extraction, expected_consumption_g=48.0)
     reality = analysis.serving_reality
 
     assert reality is not None
     assert reality.nutrition_full_package.energy_kcal == 228.0
     assert reality.nutrition_full_package.added_sugar_g == 14.4
+    assert reality.nutrition_for_expected_consumption.energy_kcal == 228.0
+    assert reality.nutrition_for_expected_consumption.added_sugar_g == 14.4
+    assert "48g you said you would eat" in reality.realistic_consumption
     assert "1 biscuit" in reality.realistic_consumption
     assert "very small stated serving" in reality.realistic_consumption
     assert any("not the same as dairy cream" in flag.title for flag in analysis.ingredient_flags)

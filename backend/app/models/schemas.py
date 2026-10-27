@@ -232,6 +232,7 @@ class ServingReality(BaseModel):
     stated_serving_g: float | None = None
     package_weight_g: float | None = None
     servings_in_package: float | None = None
+    expected_consumption_g: float | None = None
     realistic_consumption: str = Field(
         default="",
         description="Plain-language note like 'Most people eat the entire 150g packet, which is 5 servings'"
@@ -239,6 +240,10 @@ class ServingReality(BaseModel):
     nutrition_full_package: NutritionInfo | None = Field(
         None,
         description="Nutrition values if you eat the full package"
+    )
+    nutrition_for_expected_consumption: NutritionInfo | None = Field(
+        None,
+        description="Nutrition values scaled to the amount the user expects to eat"
     )
 
 

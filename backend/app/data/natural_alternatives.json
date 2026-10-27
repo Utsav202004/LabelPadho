@@ -151,6 +151,14 @@
                 "approx_cost_inr": 18,
                 "note": "Naturally intensely sweet with zero added refined sugars or preservative syrups.",
                 "diet": ["vegetarian", "vegan"]
+            },
+            {
+                "food_name": "Peanut Chikki",
+                "quantity": "1 small piece (20g)",
+                "nutrient_amount": "Peanuts, jaggery, and satisfying crunch",
+                "approx_cost_inr": 8,
+                "note": "Choose a simple ingredient list: peanuts and jaggery, without glucose syrup or palm oil.",
+                "diet": ["vegetarian", "vegan"]
             }
         ],
         "refreshing_beverage": [
@@ -177,6 +185,14 @@
                 "approx_cost_inr": 8,
                 "note": "Beats sodas and packaged fruit juices hands-down in freshness, cost, and natural vitamin content.",
                 "diet": ["vegetarian", "vegan"]
+            },
+            {
+                "food_name": "Unsweetened Iced Tea",
+                "quantity": "1 glass (250ml)",
+                "nutrient_amount": "Refreshing flavour with no added sugar",
+                "approx_cost_inr": 12,
+                "note": "Brew tea, chill it, and add lemon or mint instead of a syrup-based bottled drink.",
+                "diet": ["vegetarian", "vegan"]
             }
         ],
         "savory_snack": [
@@ -194,6 +210,22 @@
                 "nutrient_amount": "9g protein, 8g fiber, complex carbs",
                 "approx_cost_inr": 10,
                 "note": "High satiety crunchy snack that stabilizes blood sugar instead of spiking it.",
+                "diet": ["vegetarian", "vegan"]
+            },
+            {
+                "food_name": "Air-Popped Popcorn",
+                "quantity": "3 cups, lightly salted",
+                "nutrient_amount": "Whole-grain crunch with fibre",
+                "approx_cost_inr": 12,
+                "note": "Use minimal oil and salt; seasoning with chilli, amchur, or pepper keeps the flavour.",
+                "diet": ["vegetarian", "vegan"]
+            },
+            {
+                "food_name": "Roasted Peanuts",
+                "quantity": "30g (small handful)",
+                "nutrient_amount": "7g protein plus satisfying healthy fats",
+                "approx_cost_inr": 8,
+                "note": "Prefer plain or lightly salted peanuts over fried, flavoured snack mixes.",
                 "diet": ["vegetarian", "vegan"]
             }
         ]

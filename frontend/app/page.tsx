@@ -12,7 +12,6 @@ import {
   Calculator,
   CheckCircle2,
   XCircle,
-  Sparkles,
   History,
   ScanLine,
   Trash2,
@@ -89,7 +88,9 @@ interface PriceAnalysis {
 
 interface ServingReality {
   servings_in_package?: number;
+  expected_consumption_g?: number;
   nutrition_full_package?: NutritionInfo;
+  nutrition_for_expected_consumption?: NutritionInfo;
   realistic_consumption: string;
 }
 
@@ -246,12 +247,12 @@ const DEMO_AUDIT: ProductAnalysis = {
 // These are deliberately pre-computed: a recruiter can explore the rule engine
 // immediately, without waiting for a free-tier backend cold start.
 const DEMO_AUDITS: { label: string; analysis: ProductAnalysis }[] = [
-  { label: "🍪 Biscuit claim check", analysis: DEMO_AUDIT },
+  { label: "Biscuit claim", analysis: DEMO_AUDIT },
   {
-    label: "💪 Protein bar value", analysis: {
+    label: "Protein bar", analysis: {
       ...DEMO_AUDIT,
       extraction: {
-        product_name: "High Protein Peanut Bar", brand: "Demo Fitness Co.", product_category: "protein_fitness",
+        product_name: "RiteBite Max Protein Daily Bar", brand: "RiteBite", product_category: "protein_fitness",
         nutrition_per_serving: { serving_size_g: 50, servings_per_package: 1, energy_kcal: 230, protein_g: 10, sugar_g: 12, total_fat_g: 11 },
         ingredients: [{ name: "Peanut" }, { name: "Glucose Syrup" }, { name: "Milk Protein" }],
         claims: ["High Protein"],
@@ -264,10 +265,10 @@ const DEMO_AUDITS: { label: string; analysis: ProductAnalysis }[] = [
     },
   },
   {
-    label: "🥤 Soda sugar reality", analysis: {
+    label: "Soda sugar", analysis: {
       ...DEMO_AUDIT,
       extraction: {
-        product_name: "Fizz Cola", brand: "Demo Beverages", product_category: "beverage_soda",
+        product_name: "Coca-Cola", brand: "Coca-Cola", product_category: "beverage_soda",
         nutrition_per_serving: { serving_size_g: 300, servings_per_package: 1, energy_kcal: 126, sugar_g: 31.5, added_sugar_g: 31.5 },
         ingredients: [{ name: "Carbonated Water" }, { name: "Sugar" }, { name: "Caramel Colour (INS 150d)" }], claims: ["Refreshing"],
       },
@@ -279,10 +280,10 @@ const DEMO_AUDITS: { label: string; analysis: ProductAnalysis }[] = [
     },
   },
   {
-    label: "🥨 Snack sodium check", analysis: {
+    label: "Snack sodium", analysis: {
       ...DEMO_AUDIT,
       extraction: {
-        product_name: "Masala Namkeen", brand: "Demo Snacks", product_category: "savory_snack",
+        product_name: "Haldiram's Aloo Bhujia", brand: "Haldiram's", product_category: "savory_snack",
         nutrition_per_serving: { serving_size_g: 30, servings_per_package: 4, energy_kcal: 165, protein_g: 3, sodium_mg: 410, total_fat_g: 10 },
         ingredients: [{ name: "Gram Flour" }, { name: "Palmolein Oil" }, { name: "Iodized Salt" }], claims: ["No Cholesterol"],
       },
@@ -294,10 +295,10 @@ const DEMO_AUDITS: { label: string; analysis: ProductAnalysis }[] = [
     },
   },
   {
-    label: "🧃 Juice label audit", analysis: {
+    label: "Fruit drink", analysis: {
       ...DEMO_AUDIT,
       extraction: {
-        product_name: "Mango Fruit Drink", brand: "Demo Juices", product_category: "beverage_juice",
+        product_name: "Real Mango Fruit Drink", brand: "Dabur", product_category: "beverage_juice",
         nutrition_per_serving: { serving_size_g: 200, servings_per_package: 1, energy_kcal: 132, sugar_g: 27, added_sugar_g: 19 },
         ingredients: [{ name: "Water" }, { name: "Mango Pulp (12%)" }, { name: "Sugar" }], claims: ["Made with Real Mango"],
       },
@@ -309,10 +310,10 @@ const DEMO_AUDITS: { label: string; analysis: ProductAnalysis }[] = [
     },
   },
   {
-    label: "🍅 Sauce hidden sugar", analysis: {
+    label: "Ketchup sugar", analysis: {
       ...DEMO_AUDIT,
       extraction: {
-        product_name: "Tomato Ketchup", brand: "Demo Pantry", product_category: "condiment_sauce",
+        product_name: "Kissan Fresh Tomato Ketchup", brand: "Kissan", product_category: "condiment_sauce",
         nutrition_per_serving: { serving_size_g: 15, servings_per_package: 20, energy_kcal: 18, sugar_g: 4, sodium_mg: 170 },
         ingredients: [{ name: "Tomato Paste" }, { name: "Sugar" }, { name: "Salt" }], claims: ["Made from Tomatoes"],
       },
@@ -334,6 +335,7 @@ export default function Home() {
   const [frontFile, setFrontFile] = useState<File | null>(null);
   const [productName, setProductName] = useState("");
   const [price, setPrice] = useState("");
+  const [expectedConsumption, setExpectedConsumption] = useState("");
   
   // Loading & states
   const [loading, setLoading] = useState(false);
@@ -391,6 +393,11 @@ export default function Home() {
     }, 100);
   };
 
+  const loadRandomDemoAudit = () => {
+    const randomDemo = DEMO_AUDITS[Math.floor(Math.random() * DEMO_AUDITS.length)];
+    loadDemoAudit(randomDemo.analysis);
+  };
+
   const viewPastScan = async (scanId: number) => {
     setLoading(true);
     setError(null);
@@ -438,6 +445,7 @@ export default function Home() {
     if (frontFile) formData.append("front_package", frontFile);
     if (productName.trim()) formData.append("product_name", productName.trim());
     if (price.trim()) formData.append("price", price.trim());
+    if (expectedConsumption.trim()) formData.append("expected_consumption_g", expectedConsumption.trim());
 
     try {
       const res = await fetch(`${API_BASE}/api/analyze`, {
@@ -500,16 +508,12 @@ export default function Home() {
           </button>
         </div>
 
-        {/* 1-Click Recruiter Demo Button */}
+        {/* Instant Recruiter Demo */}
         <div className="mt-5">
-          <p className="text-xs text-slate-500 mb-2">Reviewing as an interviewer? Explore an instant demo:</p>
-          <div className="flex flex-wrap justify-center gap-2">
-            {DEMO_AUDITS.map((demo) => (
-              <button key={demo.label} type="button" onClick={() => loadDemoAudit(demo.analysis)} className="inline-flex items-center gap-1 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-semibold rounded-full border border-emerald-200/80 text-xs transition cursor-pointer">
-                <Sparkles className="w-3.5 h-3.5 text-emerald-600" /> {demo.label}
-              </button>
-            ))}
-          </div>
+          <button type="button" onClick={loadRandomDemoAudit} className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-semibold rounded-md border border-emerald-200/80 text-xs transition cursor-pointer">
+            Instant demo audit
+          </button>
+          <p className="text-[11px] text-slate-500 mt-1.5">Randomly loads one of six familiar Indian shelf products.</p>
         </div>
       </header>
 
@@ -568,7 +572,7 @@ export default function Home() {
               </div>
 
               {/* Additional Inputs */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
                     Product Name (Optional fallback)
@@ -580,6 +584,20 @@ export default function Home() {
                     placeholder="e.g. Protein Nachos, Brown Bread"
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                    How Much Will You Eat? (g)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={expectedConsumption}
+                    onChange={(e) => setExpectedConsumption(e.target.value)}
+                    placeholder="e.g. 50"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                  <p className="text-[11px] text-slate-500 mt-1">Optional — scales the label to your portion.</p>
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
@@ -733,6 +751,18 @@ export default function Home() {
                 </div>
               )}
 
+              {analysis.serving_reality?.realistic_consumption && (
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                  <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2 mb-3">
+                    <AlertTriangle className="w-5 h-5 text-amber-500" />
+                    Portion Reality Check
+                  </h3>
+                  <div className="p-4 rounded-xl border bg-amber-50/50 border-amber-200">
+                    <p className="text-sm text-slate-700 leading-relaxed">{analysis.serving_reality.realistic_consumption}</p>
+                  </div>
+                </div>
+              )}
+
               {/* Flagged Ingredients */}
               {analysis.ingredient_flags && analysis.ingredient_flags.length > 0 && (
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
@@ -763,6 +793,9 @@ export default function Home() {
                               {flag.severity} concern
                             </span>
                           </div>
+                          {flag.title && (
+                            <p className="text-xs font-semibold text-slate-800 mt-1">{flag.title}</p>
+                          )}
                           <p className="text-xs text-slate-600 mt-1">{flag.explanation}</p>
                         </div>
                         {flag.regulatory_source && (
@@ -779,7 +812,7 @@ export default function Home() {
               {/* Macro Value & Whole Food Alternatives */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Value Assessment */}
-                {analysis.price_analysis && (
+                {analysis.price_analysis && (analysis.price_analysis.price_per_g_protein || analysis.price_analysis.value_verdict) && (
                   <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
                     <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2 mb-3">
                       <DollarSign className="w-5 h-5 text-emerald-600" />
@@ -801,12 +834,12 @@ export default function Home() {
                   </div>
                 )}
 
-                {/* Whole Food Indian Alternatives */}
+                {/* Better swaps */}
                 {analysis.natural_alternatives && analysis.natural_alternatives.length > 0 && (
                   <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
                     <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2 mb-3">
                       <Leaf className="w-5 h-5 text-emerald-600" />
-                      Natural Indian Whole-Food Alternatives
+                      Better Swaps
                     </h3>
                     <div className="space-y-2">
                       {analysis.natural_alternatives.slice(0, 3).map((alt, idx) => (
