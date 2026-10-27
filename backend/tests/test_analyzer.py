@@ -115,6 +115,21 @@ def test_tiny_single_biscuit_serving_exposes_full_packet_sugar(analyzer):
     assert any("not the same as dairy cream" in flag.title for flag in analysis.ingredient_flags)
 
 
+def test_creme_filling_is_flagged_even_when_product_name_is_missing(analyzer):
+    """OCR can miss a product title; the ingredient panel must still trigger the clarification."""
+    extraction = LabelExtraction(
+        ingredients=[
+            ExtractedIngredient(name="Vanilla Crème Filling (Vegetable Oil, Sugar)"),
+            ExtractedIngredient(name="Refined Wheat Flour"),
+        ],
+        nutrition_per_serving=NutritionInfo(serving_size_g=10.0),
+    )
+
+    analysis = analyzer.analyze(extraction)
+
+    assert any("not the same as dairy cream" in flag.title for flag in analysis.ingredient_flags)
+
+
 def test_price_per_gram_protein(analyzer):
     """
     Test price-per-gram calculation:

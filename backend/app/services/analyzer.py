@@ -254,7 +254,10 @@ class Analyzer:
         # "Crème" is a product-style word, not proof that a filling contains dairy cream.
         # We only call this out when the label itself supports that reading: the product
         # name uses creme/crème, vegetable oil is listed, and dairy cream is not listed.
-        visible_product_text = " ".join([extraction.product_name or "", *extraction.claims]).lower()
+        visible_product_text = " ".join([
+            extraction.product_name or "", *extraction.claims,
+            *(ingredient.name for ingredient in extraction.ingredients),
+        ]).lower()
         has_creme_name = "creme" in visible_product_text or "crème" in visible_product_text
         has_vegetable_oil = any(
             any(oil in name for oil in [
