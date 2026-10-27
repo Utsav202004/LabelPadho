@@ -243,6 +243,88 @@ const DEMO_AUDIT: ProductAnalysis = {
   educational_notes: [],
 };
 
+// These are deliberately pre-computed: a recruiter can explore the rule engine
+// immediately, without waiting for a free-tier backend cold start.
+const DEMO_AUDITS: { label: string; analysis: ProductAnalysis }[] = [
+  { label: "🍪 Biscuit claim check", analysis: DEMO_AUDIT },
+  {
+    label: "💪 Protein bar value", analysis: {
+      ...DEMO_AUDIT,
+      extraction: {
+        product_name: "High Protein Peanut Bar", brand: "Demo Fitness Co.", product_category: "protein_fitness",
+        nutrition_per_serving: { serving_size_g: 50, servings_per_package: 1, energy_kcal: 230, protein_g: 10, sugar_g: 12, total_fat_g: 11 },
+        ingredients: [{ name: "Peanut" }, { name: "Glucose Syrup" }, { name: "Milk Protein" }],
+        claims: ["High Protein"],
+      },
+      product_category: "protein_fitness", category_display_name: "Protein & Fitness", health_score: 5,
+      one_line_summary: "10g protein is useful, but 12g sugar means this is not an automatic health food.",
+      detailed_summary: "A protein claim needs context: assess the protein delivered, sugar, and price together.",
+      claim_verifications: [{ claim: "High Protein", status: "misleading", explanation: "Protein contributes 17% of this serving's calories, below the 20% calorie benchmark used for a high-protein claim.", fssai_rule: "FSSAI nutrition claim assessment" }],
+      price_analysis: { price_inr: 70, price_per_g_protein: 7, value_verdict: "₹7.0/g protein — expensive versus eggs, paneer, or chana." },
+    },
+  },
+  {
+    label: "🥤 Soda sugar reality", analysis: {
+      ...DEMO_AUDIT,
+      extraction: {
+        product_name: "Fizz Cola", brand: "Demo Beverages", product_category: "beverage_soda",
+        nutrition_per_serving: { serving_size_g: 300, servings_per_package: 1, energy_kcal: 126, sugar_g: 31.5, added_sugar_g: 31.5 },
+        ingredients: [{ name: "Carbonated Water" }, { name: "Sugar" }, { name: "Caramel Colour (INS 150d)" }], claims: ["Refreshing"],
+      },
+      product_category: "beverage_soda", category_display_name: "Soda & Soft Drink", health_score: 2,
+      one_line_summary: "One bottle contains 31.5g sugar — more than the 25g daily free-sugar guideline.",
+      detailed_summary: "Liquid sugar is easy to consume quickly and is not as filling as food.",
+      claim_verifications: [{ claim: "Refreshing", status: "misleading", explanation: "The slogan does not change the bottle's 31.5g added sugar load.", fssai_rule: "Consumer-facing nutrition context" }],
+      price_analysis: undefined,
+    },
+  },
+  {
+    label: "🥨 Snack sodium check", analysis: {
+      ...DEMO_AUDIT,
+      extraction: {
+        product_name: "Masala Namkeen", brand: "Demo Snacks", product_category: "savory_snack",
+        nutrition_per_serving: { serving_size_g: 30, servings_per_package: 4, energy_kcal: 165, protein_g: 3, sodium_mg: 410, total_fat_g: 10 },
+        ingredients: [{ name: "Gram Flour" }, { name: "Palmolein Oil" }, { name: "Iodized Salt" }], claims: ["No Cholesterol"],
+      },
+      product_category: "savory_snack", category_display_name: "Savory Snack", health_score: 4,
+      one_line_summary: "A single 30g serving has 410mg sodium; a whole packet has 1,640mg.",
+      detailed_summary: "For savory snacks, sodium and realistic portion size matter more than protein marketing.",
+      claim_verifications: [{ claim: "No Cholesterol", status: "misleading", explanation: "Plant oils naturally contain no dietary cholesterol; this does not make a fried snack heart-healthy.", fssai_rule: "Biological context for cholesterol claims" }],
+      price_analysis: undefined,
+    },
+  },
+  {
+    label: "🧃 Juice label audit", analysis: {
+      ...DEMO_AUDIT,
+      extraction: {
+        product_name: "Mango Fruit Drink", brand: "Demo Juices", product_category: "beverage_juice",
+        nutrition_per_serving: { serving_size_g: 200, servings_per_package: 1, energy_kcal: 132, sugar_g: 27, added_sugar_g: 19 },
+        ingredients: [{ name: "Water" }, { name: "Mango Pulp (12%)" }, { name: "Sugar" }], claims: ["Made with Real Mango"],
+      },
+      product_category: "beverage_juice", category_display_name: "Fruit Juice & Nectar", health_score: 3,
+      one_line_summary: "Contains real mango pulp, but it is still a sweetened fruit drink with 27g sugar.",
+      detailed_summary: "Fruit imagery should not be confused with the fibre and fullness of whole fruit.",
+      claim_verifications: [{ claim: "Made with Real Mango", status: "verified", explanation: "Mango pulp is listed, but only at 12%; the nutrition panel still shows 19g added sugar.", fssai_rule: "Ingredient-list cross-check" }],
+      price_analysis: undefined,
+    },
+  },
+  {
+    label: "🍅 Sauce hidden sugar", analysis: {
+      ...DEMO_AUDIT,
+      extraction: {
+        product_name: "Tomato Ketchup", brand: "Demo Pantry", product_category: "condiment_sauce",
+        nutrition_per_serving: { serving_size_g: 15, servings_per_package: 20, energy_kcal: 18, sugar_g: 4, sodium_mg: 170 },
+        ingredients: [{ name: "Tomato Paste" }, { name: "Sugar" }, { name: "Salt" }], claims: ["Made from Tomatoes"],
+      },
+      product_category: "condiment_sauce", category_display_name: "Condiment & Sauce", health_score: 5,
+      one_line_summary: "A small tablespoon has 4g sugar and 170mg sodium; portions add up quickly.",
+      detailed_summary: "Condiments are judged by their realistic repeated use, not only their small serving size.",
+      claim_verifications: [{ claim: "Made from Tomatoes", status: "verified", explanation: "Tomato paste is present, but this claim does not describe the added sugar and sodium.", fssai_rule: "Ingredient-list cross-check" }],
+      price_analysis: undefined,
+    },
+  },
+];
+
 export default function Home() {
   const [activeTab, setActiveTab] = useState<"scan" | "history">("scan");
   
@@ -300,9 +382,9 @@ export default function Home() {
     }
   }, [activeTab]);
 
-  const loadDemoAudit = () => {
+  const loadDemoAudit = (demo: ProductAnalysis) => {
     setError(null);
-    setAnalysis(DEMO_AUDIT);
+    setAnalysis(demo);
     setActiveTab("scan");
     setTimeout(() => {
       window.scrollTo({ top: 480, behavior: "smooth" });
@@ -380,9 +462,6 @@ export default function Home() {
     <main className="max-w-5xl mx-auto px-4 py-8">
       {/* Header */}
       <header className="text-center mb-8">
-        <div className="inline-flex items-center gap-2 px-3 py-1 bg-amber-100 text-amber-800 rounded-full text-sm font-medium mb-3">
-          <Sparkles className="w-4 h-4" /> Multimodal Food Label Auditor
-        </div>
         <h1 className="text-4xl font-extrabold tracking-tight text-slate-900 sm:text-5xl">
           Label<span className="text-emerald-600">Padho</span>
         </h1>
@@ -422,16 +501,15 @@ export default function Home() {
         </div>
 
         {/* 1-Click Recruiter Demo Button */}
-        <div className="flex items-center justify-center gap-2 mt-4 text-xs text-slate-500">
-          <span>Reviewing as an interviewer?</span>
-          <button
-            type="button"
-            onClick={loadDemoAudit}
-            className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-semibold rounded-full border border-emerald-200/80 transition cursor-pointer"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-            Click for Instant 1-Second Demo Audit
-          </button>
+        <div className="mt-5">
+          <p className="text-xs text-slate-500 mb-2">Reviewing as an interviewer? Explore an instant demo:</p>
+          <div className="flex flex-wrap justify-center gap-2">
+            {DEMO_AUDITS.map((demo) => (
+              <button key={demo.label} type="button" onClick={() => loadDemoAudit(demo.analysis)} className="inline-flex items-center gap-1 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-semibold rounded-full border border-emerald-200/80 text-xs transition cursor-pointer">
+                <Sparkles className="w-3.5 h-3.5 text-emerald-600" /> {demo.label}
+              </button>
+            ))}
+          </div>
         </div>
       </header>
 
@@ -443,7 +521,7 @@ export default function Home() {
             <form onSubmit={handleSubmit} className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {/* 1. Nutrition Table (Required) */}
-                <div className="border-2 border-dashed border-emerald-300 rounded-xl p-4 text-center bg-emerald-50/30 hover:bg-emerald-50 transition">
+                <div className="border-2 border-dashed border-slate-300 rounded-xl p-4 text-center bg-white hover:border-emerald-400 hover:bg-emerald-50/30 transition">
                   <Upload className="w-8 h-8 text-emerald-600 mx-auto mb-2" />
                   <label className="block text-sm font-semibold text-slate-900 mb-1">
                     1. Nutrition Table <span className="text-red-500">*</span>
@@ -459,7 +537,7 @@ export default function Home() {
                 </div>
 
                 {/* 2. Ingredients List (Optional) */}
-                <div className="border-2 border-dashed border-slate-300 rounded-xl p-4 text-center bg-slate-50/50 hover:bg-slate-50 transition">
+                <div className="border-2 border-dashed border-slate-300 rounded-xl p-4 text-center bg-white hover:border-emerald-400 hover:bg-emerald-50/30 transition">
                   <Upload className="w-8 h-8 text-slate-500 mx-auto mb-2" />
                   <label className="block text-sm font-semibold text-slate-900 mb-1">
                     2. Ingredients Panel
@@ -474,8 +552,8 @@ export default function Home() {
                 </div>
 
                 {/* 3. Front of Pack (Optional) */}
-                <div className="border-2 border-dashed border-slate-300 rounded-xl p-4 text-center bg-slate-50/50 hover:bg-slate-50 transition">
-                  <Upload className="w-8 h-8 text-amber-500 mx-auto mb-2" />
+                <div className="border-2 border-dashed border-slate-300 rounded-xl p-4 text-center bg-white hover:border-emerald-400 hover:bg-emerald-50/30 transition">
+                  <Upload className="w-8 h-8 text-slate-500 mx-auto mb-2" />
                   <label className="block text-sm font-semibold text-slate-900 mb-1">
                     3. Front of Pack
                   </label>

@@ -250,6 +250,35 @@ class Analyzer:
                     )
                     break  # One flag per ingredient (use the first match)
 
+        # "Crème" is a product-style word, not proof that a filling contains dairy cream.
+        # We only call this out when the label itself supports that reading: the product
+        # name uses creme/crème, vegetable oil is listed, and dairy cream is not listed.
+        product_name = (extraction.product_name or "").lower()
+        has_creme_name = "creme" in product_name or "crème" in product_name
+        has_vegetable_oil = any(
+            "vegetable oil" in name or "palm oil" in name
+            for name in (ingredient.name.lower() for ingredient in extraction.ingredients)
+        )
+        has_dairy_cream = any(
+            "cream" in ingredient.name.lower()
+            for ingredient in extraction.ingredients
+        )
+        if has_creme_name and has_vegetable_oil and not has_dairy_cream:
+            flags.append(
+                IngredientFlag(
+                    ingredient_name=extraction.product_name or "Crème-style product",
+                    severity="info",
+                    flag_type="label_clarity",
+                    title="‘Crème’ is not the same as dairy cream",
+                    explanation=(
+                        "‘Crème’ is a style term, not evidence of dairy cream. This label lists "
+                        "vegetable oil and does not list cream, so the name should not be read as "
+                        "a dairy-cream claim. Check the ingredient panel for the actual fat source."
+                    ),
+                    source=None,
+                )
+            )
+
         # Also check marketing claims against misleading terms
         for claim in extraction.claims:
             claim_lower = claim.lower()
@@ -364,12 +393,23 @@ class Analyzer:
         # Generate a plain-language note
         realistic = ""
         if servings and servings > 1.5:
+            serving_description = nutrition.serving_unit_description
+            serving_label = (
+                f"{serving_g}g ({serving_description})"
+                if serving_description
+                else f"{serving_g}g"
+            )
             realistic = (
-                f"The label shows nutrition for a {serving_g}g serving, "
+                f"The label shows nutrition for a {serving_label} serving, "
                 f"but the full packet is {package_g}g "
                 f"({servings:.0f} servings). "
                 f"Most people eat more than one serving in a sitting."
             )
+            if serving_g <= 10 and servings >= 4:
+                realistic += (
+                    " This is a very small stated serving for a multi-piece snack, "
+                    "so compare the full-packet figures before deciding."
+                )
             # Add specific warnings for high-multiplier nutrients
             if full_package_nutrition:
                 warnings = []
@@ -867,7 +907,7 @@ class Analyzer:
         elif category == ProductCategory.BEVERAGE_SODA:
             # Liquid sugar rush has zero satiety and spikes glucose instantly
             if nutrition.sugar_g and nutrition.sugar_g > 20:
-                score -= 2.5
+                score -= 3.0
             elif nutrition.sugar_g and nutrition.sugar_g > 10:
                 score -= 1.5
 
@@ -1481,7 +1521,11 @@ class Analyzer:
         # 10. "Loaded with Nuts" / "Nuts & Seeds" Prominence Audit
         if "nut" in combined_text and ("loaded" in combined_text or "rich" in combined_text or "power" in combined_text or "packed" in combined_text):
             nuts = ["almond", "cashew", "pista", "walnut", "peanut", "hazelnut", "chia", "flax", "pumpkin seed", "sunflower seed"]
-            found_nut_ingredients = [ing for ing in ingredients_names if any(n in ing for n in nuts)]
+            found_nut_ingredients = [
+                ingredient.name
+                for ingredient in extraction.ingredients
+                if any(n in ingredient.name.lower() for n in nuts)
+            ]
 
             if not found_nut_ingredients:
                 verifications.append(

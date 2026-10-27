@@ -58,6 +58,13 @@ class ProductCategory(str, Enum):
 class NutritionInfo(BaseModel):
     """Nutritional values as printed on the label."""
 
+    serving_unit_description: str | None = Field(
+        None,
+        description=(
+            "Serving wording exactly as printed, such as '1 biscuit', '2 cookies', "
+            "or '30g (about 10 chips)'. Do not guess when it is not shown."
+        ),
+    )
     serving_size_g: float | None = Field(
         None,
         description="Serving size in grams as stated on the label"
@@ -173,7 +180,7 @@ class LabelExtraction(BaseModel):
         default_factory=list,
         description="Marketing claims on the package (e.g., 'High Protein', 'No Added Sugar', 'Loaded with Nuts')"
     )
-    raw_claims_audit: list[ClaimVerification] = Field(
+    raw_claims_audit: list["ClaimVerification"] = Field(
         default_factory=list,
         description=(
             "Cross-examination of every marketing claim found on the packaging against the actual "

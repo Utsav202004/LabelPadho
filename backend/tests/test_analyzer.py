@@ -81,6 +81,37 @@ def test_serving_size_trap_calculation(analyzer):
     assert "1500mg" in reality.realistic_consumption or "daily limit" in reality.realistic_consumption
 
 
+def test_tiny_single_biscuit_serving_exposes_full_packet_sugar(analyzer):
+    """A one-biscuit serving must not hide the packet-level sugar and calories."""
+    extraction = LabelExtraction(
+        product_name="P5 Vanilla Crème Biscuits",
+        net_weight_g=48.0,
+        ingredients=[
+            ExtractedIngredient(name="Refined Wheat Flour"),
+            ExtractedIngredient(name="Vegetable Oil"),
+            ExtractedIngredient(name="Sugar"),
+        ],
+        nutrition_per_serving=NutritionInfo(
+            serving_unit_description="1 biscuit",
+            serving_size_g=8.0,
+            servings_per_package=6.0,
+            energy_kcal=38.0,
+            sugar_g=2.5,
+            added_sugar_g=2.4,
+        ),
+    )
+
+    analysis = analyzer.analyze(extraction)
+    reality = analysis.serving_reality
+
+    assert reality is not None
+    assert reality.nutrition_full_package.energy_kcal == 228.0
+    assert reality.nutrition_full_package.added_sugar_g == 14.4
+    assert "1 biscuit" in reality.realistic_consumption
+    assert "very small stated serving" in reality.realistic_consumption
+    assert any("not the same as dairy cream" in flag.title for flag in analysis.ingredient_flags)
+
+
 def test_price_per_gram_protein(analyzer):
     """
     Test price-per-gram calculation:
