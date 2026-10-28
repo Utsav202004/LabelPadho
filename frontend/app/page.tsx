@@ -575,7 +575,7 @@ export default function Home() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                    Product Name (Optional fallback)
+                    Product Name <span className="normal-case">(Optional)</span>
                   </label>
                   <input
                     type="text"
@@ -587,7 +587,7 @@ export default function Home() {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                    How Much Will You Eat? (g)
+                    How Much Will You Eat? <span className="normal-case">(Grams - Optional)</span>
                   </label>
                   <input
                     type="number"
@@ -597,11 +597,11 @@ export default function Home() {
                     placeholder="e.g. 50"
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   />
-                  <p className="text-[11px] text-slate-500 mt-1">Optional — scales the label to your portion.</p>
+                  <p className="text-[11px] text-amber-700 mt-1">Important — usual serving size can be deceiving.</p>
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                    Product Price (₹ INR - Optional)
+                    Product Price <span className="normal-case">(₹ INR - Optional)</span>
                   </label>
                   <input
                     type="number"
@@ -1002,6 +1002,13 @@ export default function Home() {
           )}
         </section>
       )}
+
+      <section className="mt-12 border-t border-slate-200 pt-6 text-center">
+        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Coming next</p>
+        <p className="mt-2 text-sm text-slate-600">
+          Quick craving-aware recipes and category leaderboards to make healthier shelf choices easier.
+        </p>
+      </section>
     </main>
   );
 }

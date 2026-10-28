@@ -1,5 +1,5 @@
 {
-    "_comment": "Natural whole-food alternatives for common nutrients found in packaged foods. Prices are approximate 2024-25 Indian market rates.",
+    "_comment": "Category-specific whole-food swaps informed by ICMR-NIN Dietary Guidelines for Indians (2024) and FSSAI Eat Right guidance. Prices are approximate 2024-25 Indian market rates.",
     "alternatives": {
         "protein": [
             {
@@ -226,6 +226,84 @@
                 "nutrient_amount": "7g protein plus satisfying healthy fats",
                 "approx_cost_inr": 8,
                 "note": "Prefer plain or lightly salted peanuts over fried, flavoured snack mixes.",
+                "diet": ["vegetarian", "vegan"]
+            }
+        ],
+        "staple_grain": [
+            {
+                "food_name": "Stone-Ground Whole-Wheat Atta",
+                "quantity": "2 rotis",
+                "nutrient_amount": "Whole-grain carbohydrate with more fibre than refined flour",
+                "approx_cost_inr": 12,
+                "note": "Choose an ingredient list that starts and ends with whole wheat flour.",
+                "diet": ["vegetarian", "vegan"]
+            },
+            {
+                "food_name": "Plain Oats",
+                "quantity": "40g dry oats",
+                "nutrient_amount": "Whole grain with soluble fibre",
+                "approx_cost_inr": 10,
+                "note": "Build flavour with fruit, curd, nuts, or vegetables instead of a sweetened cereal mix.",
+                "diet": ["vegetarian", "vegan"]
+            },
+            {
+                "food_name": "Millet Khichdi",
+                "quantity": "1 bowl",
+                "nutrient_amount": "Millet plus pulses for a filling grain-based meal",
+                "approx_cost_inr": 25,
+                "note": "A home-cooked staple keeps salt, oil, and add-ins in your control.",
+                "diet": ["vegetarian", "vegan"]
+            }
+        ],
+        "dairy_dairy_alt": [
+            {
+                "food_name": "Plain Curd / Dahi",
+                "quantity": "1 bowl (200g)",
+                "nutrient_amount": "Protein and calcium without flavoured added sugar",
+                "approx_cost_inr": 20,
+                "note": "Add fruit or spices yourself instead of choosing a sweetened dairy dessert.",
+                "diet": ["vegetarian"]
+            },
+            {
+                "food_name": "Toned Milk",
+                "quantity": "1 glass (250ml)",
+                "nutrient_amount": "Protein and calcium in a simple dairy option",
+                "approx_cost_inr": 16,
+                "note": "Compare the label with flavoured milk and milkshake products before buying.",
+                "diet": ["vegetarian"]
+            },
+            {
+                "food_name": "Unsweetened Soy Milk",
+                "quantity": "1 glass (250ml)",
+                "nutrient_amount": "Plant-based drink without added sugar",
+                "approx_cost_inr": 30,
+                "note": "Check the pack for added sugar and choose a calcium-fortified version when available.",
+                "diet": ["vegetarian", "vegan"]
+            }
+        ],
+        "condiment_sauce": [
+            {
+                "food_name": "Fresh Tomato Salsa",
+                "quantity": "2 tablespoons",
+                "nutrient_amount": "Tomato, onion, and herbs with no required added sugar",
+                "approx_cost_inr": 10,
+                "note": "Make a small batch with lemon, chilli, and herbs instead of a sugar-heavy ketchup.",
+                "diet": ["vegetarian", "vegan"]
+            },
+            {
+                "food_name": "Mint-Coriander Chutney",
+                "quantity": "2 tablespoons",
+                "nutrient_amount": "Herb-based flavour with controllable salt",
+                "approx_cost_inr": 8,
+                "note": "Use lemon and roasted cumin for flavour; salt can stay modest.",
+                "diet": ["vegetarian", "vegan"]
+            },
+            {
+                "food_name": "Roasted Peanut Chutney",
+                "quantity": "2 tablespoons",
+                "nutrient_amount": "Nut-based flavour and some protein",
+                "approx_cost_inr": 12,
+                "note": "A useful swap for creamy dips made mostly with refined oil.",
                 "diet": ["vegetarian", "vegan"]
             }
         ]

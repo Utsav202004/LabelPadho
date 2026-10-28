@@ -597,93 +597,35 @@ class Analyzer:
         For chips/snacks: healthy crunchy bites (roasted makhana, roasted chana).
         For protein/fitness: whole-food complete proteins (eggs, paneer, sattu).
         """
-        alternatives: list[NaturalAlternative] = []
-        nutrition = extraction.nutrition_per_serving
         category = extraction.product_category or ProductCategory.GENERAL_PACKAGED
+        category_swaps = {
+            ProductCategory.DESSERT_SWEET: ("sweet_treat", "a less-processed sweet option"),
+            ProductCategory.SAVORY_SNACK: ("savory_snack", "a savoury snack option"),
+            ProductCategory.BEVERAGE_SODA: ("refreshing_beverage", "a refreshing drink option"),
+            ProductCategory.BEVERAGE_JUICE: ("refreshing_beverage", "a refreshing drink option"),
+            ProductCategory.PROTEIN_FITNESS: ("protein", "a protein-focused option"),
+            ProductCategory.STAPLE_GRAIN: ("staple_grain", "a whole-grain staple option"),
+            ProductCategory.DAIRY_DAIRY_ALT: ("dairy_dairy_alt", "a dairy or dairy-alternative option"),
+            ProductCategory.CONDIMENT_SAUCE: ("condiment_sauce", "a condiment option"),
+        }
+        selection = category_swaps.get(category)
+        if not selection and any("protein" in claim.lower() for claim in extraction.claims):
+            selection = ("protein", "a protein-focused option")
+        if not selection:
+            return []
 
-        # 1. Desserts & Sweets
-        if category == ProductCategory.DESSERT_SWEET:
-            for alt in self._select_alternatives("sweet_treat", 3, extraction.product_name):
-                alternatives.append(
-                    NaturalAlternative(
-                        nutrient="sweetness without junk",
-                        food_name=alt["food_name"],
-                        quantity=alt["quantity"],
-                        nutrient_amount=alt["nutrient_amount"],
-                        approx_cost_inr=alt.get("approx_cost_inr"),
-                        note=alt.get("note", ""),
-                    )
-                )
-            return alternatives
-
-        # 2. Beverages (Sodas & Packaged Juices)
-        if category in [ProductCategory.BEVERAGE_SODA, ProductCategory.BEVERAGE_JUICE]:
-            for alt in self._select_alternatives("refreshing_beverage", 3, extraction.product_name):
-                alternatives.append(
-                    NaturalAlternative(
-                        nutrient="natural hydration",
-                        food_name=alt["food_name"],
-                        quantity=alt["quantity"],
-                        nutrient_amount=alt["nutrient_amount"],
-                        approx_cost_inr=alt.get("approx_cost_inr"),
-                        note=alt.get("note", ""),
-                    )
-                )
-            return alternatives
-
-        # 3. Savory Snacks
-        if category == ProductCategory.SAVORY_SNACK:
-            for alt in self._select_alternatives("savory_snack", 3, extraction.product_name):
-                alternatives.append(
-                    NaturalAlternative(
-                        nutrient="healthy crunch",
-                        food_name=alt["food_name"],
-                        quantity=alt["quantity"],
-                        nutrient_amount=alt["nutrient_amount"],
-                        approx_cost_inr=alt.get("approx_cost_inr"),
-                        note=alt.get("note", ""),
-                    )
-                )
-
-        # 4. Protein / Fitness / High-Protein Items
-        is_protein_product = any(
-            "protein" in claim.lower() for claim in extraction.claims
-        )
-        has_high_protein = (nutrition.protein_g and nutrition.protein_g >= 10)
-        is_protein_category = category in [ProductCategory.PROTEIN_FITNESS, ProductCategory.DAIRY_DAIRY_ALT]
-
-        if is_protein_product or has_high_protein or is_protein_category:
-            for alt in self._select_alternatives("protein", 3, extraction.product_name):
-                alternatives.append(
-                    NaturalAlternative(
-                        nutrient="protein",
-                        food_name=alt["food_name"],
-                        quantity=alt["quantity"],
-                        nutrient_amount=alt["nutrient_amount"],
-                        approx_cost_inr=alt.get("approx_cost_inr"),
-                        note=alt.get("note", ""),
-                    )
-                )
-
-        # 5. Fiber-rich or fiber-claiming products
-        has_fiber_claim = any(
-            "fiber" in claim.lower() or "fibre" in claim.lower()
-            for claim in extraction.claims
-        )
-        if has_fiber_claim or (nutrition.fiber_g and nutrition.fiber_g >= 3):
-            for alt in self._select_alternatives("fiber", 2, extraction.product_name):
-                alternatives.append(
-                    NaturalAlternative(
-                        nutrient="fiber",
-                        food_name=alt["food_name"],
-                        quantity=alt["quantity"],
-                        nutrient_amount=alt["nutrient_amount"],
-                        approx_cost_inr=alt.get("approx_cost_inr"),
-                        note=alt.get("note", ""),
-                    )
-                )
-
-        return alternatives
+        data_key, nutrient_label = selection
+        return [
+            NaturalAlternative(
+                nutrient=nutrient_label,
+                food_name=alt["food_name"],
+                quantity=alt["quantity"],
+                nutrient_amount=alt["nutrient_amount"],
+                approx_cost_inr=alt.get("approx_cost_inr"),
+                note=alt.get("note", ""),
+            )
+            for alt in self._select_alternatives(data_key, 3, extraction.product_name)
+        ]
 
     # ========================================================
     # Analysis Layer 5: Educational Notes
