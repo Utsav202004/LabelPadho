@@ -1814,60 +1814,47 @@ class Analyzer:
                 ))
                 seen_names.add(water_name.lower())
 
-        # Step 3: Base flour / grain estimation if undeclared
-        current_sum = sum(s.percentage for s in shares)
-        if current_sum < 96.0:
-            undeclared_grains = [
-                clean_ing_name(i.name) for i in ingredients
-                if any(k in i.name.lower() for k in FILLER_GRAIN_KEYWORDS) and clean_ing_name(i.name).lower() not in seen_names
-            ]
-            if undeclared_grains:
-                primary_grain = undeclared_grains[0]
-                grain_share = max(round(100.0 - current_sum - 3.5, 1), 10.0)
-                shares.insert(0, IngredientShare(
-                    name=primary_grain,
-                    percentage=grain_share,
-                    is_estimated=True,
-                    source="estimated",
-                    category="flour_grain",
-                    color_hint="#3b82f6",
-                ))
-                seen_names.add(primary_grain.lower())
+        # Step 3: Grouped Undeclared Bracket (FSSAI Descending Order Rule)
+        # Avoid hallucinating arbitrary percentages for individual flours, oils, or additives.
+        # FSSAI only mandates QUID for hero/characterizing ingredients; remaining ingredients
+        # are legally mandated to appear in descending order of weight.
+        allocated_sum = sum(s.percentage for s in shares)
+        accounted_names = set(seen_names)
 
-        # Step 4: Normalization & Micro-Additives Remainder
-        # Declared QUID percentages are statutory ground truth — preserve them exactly.
-        declared_sum = sum(s.percentage for s in shares if not s.is_estimated)
-        derived_slices = [s for s in shares if s.is_estimated]
-        derived_sum = sum(s.percentage for s in derived_slices)
+        undeclared_items = [
+            clean_ing_name(ing.name) for ing in ingredients
+            if clean_ing_name(ing.name).lower() not in accounted_names
+        ]
 
-        if declared_sum + derived_sum > 100.0 and derived_slices:
-            available_budget = max(100.0 - declared_sum, 0.0)
-            if derived_sum > 0:
-                scale = available_budget / derived_sum
-                for s in derived_slices:
-                    s.percentage = round(s.percentage * scale, 1)
-        elif declared_sum + derived_sum < 99.5:
-            remainder = round(100.0 - (declared_sum + derived_sum), 1)
-            if remainder >= 0.5:
-                shares.append(IngredientShare(
-                    name="Micro-Additives, Salt & Flavors",
-                    percentage=remainder,
-                    is_estimated=True,
-                    source="estimated",
-                    category="additive_micro",
-                    color_hint="#94a3b8",
-                ))
+        if allocated_sum < 100.0 and undeclared_items:
+            remainder = round(100.0 - allocated_sum, 1)
+            preview = undeclared_items[:2]
+            if len(undeclared_items) > 2:
+                bracket_title = f"Undeclared Base & Additives ({', '.join(preview)} + {len(undeclared_items) - 2} more)"
+            else:
+                bracket_title = f"Undeclared Base & Additives ({', '.join(preview)})"
 
-        # Fine-tune rounding difference on estimated/derived slices so declared slices remain pristine
+            shares.append(IngredientShare(
+                name=bracket_title,
+                percentage=remainder,
+                is_estimated=True,
+                source="fssai_undeclared_bracket",
+                category="undeclared_group",
+                color_hint="#94a3b8",
+            ))
+
+        # Ensure exact 100% sum by adjusting the undeclared bracket or largest non-hero slice
         diff = round(100.0 - sum(s.percentage for s in shares), 1)
         if shares and abs(diff) > 0:
-            candidate_slices = [s for s in shares if s.is_estimated] or shares
-            target_slice = max(candidate_slices, key=lambda s: s.percentage)
+            target_slice = next((s for s in shares if s.category == "undeclared_group"), None)
+            if not target_slice:
+                non_hero = [s for s in shares if s.category != "hero_ingredient"]
+                target_slice = max(non_hero, key=lambda s: s.percentage) if non_hero else shares[0]
             target_slice.percentage = round(target_slice.percentage + diff, 1)
 
-        # Step 5: Hero Ingredient Trap Audit
+        # Step 4: Hero Ingredient Trap Audit
         hero_shares = [s for s in shares if s.category == "hero_ingredient"]
-        filler_shares = [s for s in shares if s.category in ("flour_grain", "fat_oil", "sweetener")]
+        filler_shares = [s for s in shares if s.category in ("flour_grain", "fat_oil", "sweetener", "undeclared_group")]
         filler_total = sum(s.percentage for s in filler_shares)
         hero_total = sum(s.percentage for s in hero_shares)
 
@@ -1882,11 +1869,11 @@ class Analyzer:
             if any(k in product_text for k in [hs_name_clean, "nut", "dry fruit", "oat", "kaju", "badam", "cashew", "almond", "fruit", "kesar"]):
                 if hs.percentage <= 6.0 and filler_total >= 50.0:
                     has_hero_trap = True
-                    filler_names = ", ".join(f.name for f in filler_shares[:3])
+                    filler_names = ", ".join(f.name for f in filler_shares[:2])
                     hero_insight = (
                         f"Packaging prominently advertises '{hs.name}', but it constitutes only "
-                        f"{hs.percentage:.1f}% of the product. The overwhelming bulk is cheap fillers "
-                        f"({filler_names}) totaling {filler_total:.1f}%."
+                        f"{hs.percentage:.1f}% of the product. The remaining {filler_total:.1f}% consists of "
+                        f"bulk fillers ({filler_names}) with undeclared specific weights."
                     )
                     break
 
@@ -1903,6 +1890,16 @@ class Analyzer:
 
         coverage = sum(s.percentage for s in shares if not s.is_estimated or s.source == "nutrition_derived")
 
+        fssai_disclosure = (
+            "Under FSSAI Labelling Regulations (Regulation 5), companies are only legally required "
+            "to declare exact percentages for characterizing or advertised 'hero' ingredients (QUID). "
+            "For all other base ingredients and additives, Indian law mandates they must be listed in "
+            "strict descending order of weight (the #1 ingredient is present in the largest quantity). "
+            "LabelPadho groups undeclared ingredients together rather than fabricating unverified percentages."
+        )
+
+        descending_ingredients = [clean_ing_name(ing.name) for ing in ingredients]
+
         return IngredientBreakdown(
             shares=shares,
             has_hero_trap=has_hero_trap,
@@ -1910,5 +1907,8 @@ class Analyzer:
             filler_percentage=round(filler_total, 1),
             hero_percentage=round(hero_total, 1),
             coverage_percentage=round(coverage, 1),
+            fssai_disclosure=fssai_disclosure,
+            descending_ingredients=descending_ingredients,
+            undeclared_ingredients=undeclared_items,
         )
 

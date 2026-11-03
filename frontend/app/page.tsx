@@ -106,6 +106,9 @@ interface IngredientBreakdown {
   filler_percentage: number;
   hero_percentage: number;
   coverage_percentage: number;
+  fssai_disclosure?: string;
+  descending_ingredients?: string[];
+  undeclared_ingredients?: string[];
 }
 
 interface ServingReality {
@@ -262,17 +265,27 @@ const DEMO_AUDIT: ProductAnalysis = {
   },
   ingredient_breakdown: {
     has_hero_trap: true,
-    hero_insight: "Packaging prominently advertises 'Rolled Oats', but it constitutes only 4.0% of the cookie. In contrast, cheap fillers (Refined Wheat Flour (Maida), Sugar & Syrups, Refined Palm Oil) make up 92.0%.",
+    hero_insight: "Packaging prominently advertises 'Rolled Oats', but it constitutes only 4.0% of the cookie. In contrast, cheap fillers (Refined Wheat Flour (Maida) 54%, Sweeteners 22%, and undeclared palm oil/leaveners) make up 96.0%.",
     hero_percentage: 4.0,
-    filler_percentage: 92.0,
-    coverage_percentage: 92.0,
+    filler_percentage: 89.0,
+    coverage_percentage: 87.0,
+    fssai_disclosure: "Under FSSAI Labelling Regulations (Regulation 5), companies are only required to declare exact percentages for characterizing hero ingredients (QUID). Remaining ingredients appear in strict descending order of weight. LabelPadho groups undeclared ingredients together rather than fabricating unverified percentages.",
+    descending_ingredients: [
+      "Refined Wheat Flour (Maida) (54%)",
+      "Sugar",
+      "Refined Palm Oil",
+      "Wheat Flour (Atta) (7%)",
+      "Rolled Oats (4%)",
+      "Invert Sugar Syrup",
+      "Raising Agents (INS 500(ii), INS 503(ii))"
+    ],
+    undeclared_ingredients: ["Refined Palm Oil", "Invert Sugar Syrup", "Raising Agents"],
     shares: [
       { name: "Refined Wheat Flour (Maida)", percentage: 54.0, is_estimated: false, source: "declared", category: "flour_grain", color_hint: "#3b82f6" },
-      { name: "Sugar & Invert Syrup", percentage: 22.0, is_estimated: true, source: "nutrition_derived", category: "sweetener", color_hint: "#ef4444" },
-      { name: "Refined Palm Oil", percentage: 16.0, is_estimated: true, source: "nutrition_derived", category: "fat_oil", color_hint: "#f59e0b" },
+      { name: "Total Sweeteners (Sugar & Syrup)", percentage: 22.0, is_estimated: true, source: "nutrition_derived", category: "sweetener", color_hint: "#ef4444" },
+      { name: "Undeclared Base & Additives (Palm Oil, Leaveners)", percentage: 13.0, is_estimated: true, source: "fssai_undeclared_bracket", category: "undeclared_group", color_hint: "#94a3b8" },
       { name: "Wheat Flour (Atta)", percentage: 7.0, is_estimated: false, source: "declared", category: "flour_grain", color_hint: "#60a5fa" },
       { name: "Rolled Oats", percentage: 4.0, is_estimated: false, source: "declared", category: "hero_ingredient", color_hint: "#10b981" },
-      { name: "Raising Agents & Salt", percentage: 3.0, is_estimated: true, source: "estimated", category: "additive_micro", color_hint: "#94a3b8" },
     ],
   },
   natural_alternatives: [
@@ -526,6 +539,8 @@ function IngredientDonutChart({ breakdown }: { breakdown?: IngredientBreakdown }
                   ? "Sweetener"
                   : activeShare.category === "fat_oil"
                   ? "Edible Fat"
+                  : activeShare.category === "undeclared_group"
+                  ? "Undeclared Group"
                   : activeShare.category === "flour_grain"
                   ? "Base Flour"
                   : activeShare.category === "beverage_base"
@@ -539,7 +554,11 @@ function IngredientDonutChart({ breakdown }: { breakdown?: IngredientBreakdown }
                 {activeShare.name}
               </span>
               <span className="text-[9px] text-slate-400 font-medium mt-0.5">
-                {activeShare.source === "declared" ? "Declared on Label" : "Derived from Macros"}
+                {activeShare.source === "declared"
+                  ? "Declared QUID"
+                  : activeShare.source === "nutrition_derived"
+                  ? "Derived from Nutrition Panel"
+                  : "FSSAI Undeclared Bracket"}
               </span>
             </div>
           </div>
@@ -583,10 +602,16 @@ function IngredientDonutChart({ breakdown }: { breakdown?: IngredientBreakdown }
                           className={`text-[9px] font-semibold px-1.5 py-0.2 rounded ${
                             share.source === "declared"
                               ? "bg-emerald-100 text-emerald-800"
-                              : "bg-slate-100 text-slate-600"
+                              : share.source === "nutrition_derived"
+                              ? "bg-blue-100 text-blue-800"
+                              : "bg-slate-200 text-slate-700"
                           }`}
                         >
-                          {share.source === "declared" ? "Declared QUID" : "Derived from Nutrition"}
+                          {share.source === "declared"
+                            ? "Declared QUID"
+                            : share.source === "nutrition_derived"
+                            ? "Derived from Nutrition"
+                            : "Grouped Undeclared Bracket"}
                         </span>
                         {share.category === "hero_ingredient" && (
                           <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-100 text-amber-800">
@@ -611,6 +636,50 @@ function IngredientDonutChart({ breakdown }: { breakdown?: IngredientBreakdown }
             <span>Declared & Derived Coverage: <strong>{breakdown.coverage_percentage}%</strong></span>
             <span>Total Sum: <strong>100%</strong></span>
           </div>
+        </div>
+      </div>
+
+      {/* FSSAI Statutory Rule & Descending Order of Weight */}
+      <div className="mt-6 pt-5 border-t border-slate-200/80">
+        <div className="bg-slate-50 rounded-xl p-4 border border-slate-200/90">
+          <div className="flex items-start gap-2.5 mb-2">
+            <BookOpen className="w-4 h-4 text-indigo-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                Why are some ingredients grouped? (FSSAI Descending Order Rule)
+              </h4>
+              <p className="text-xs text-slate-600 leading-relaxed mt-1">
+                {breakdown.fssai_disclosure ||
+                  "Under FSSAI Regulations, companies are only required to declare percentages for characterizing hero ingredients. Remaining ingredients are legally mandated to appear in descending order of weight. LabelPadho groups undeclared items rather than guessing fake percentages."}
+              </p>
+            </div>
+          </div>
+
+          {breakdown.descending_ingredients && breakdown.descending_ingredients.length > 0 && (
+            <div className="mt-3 pt-3 border-t border-slate-200/60">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-2">
+                Statutory Order of Ingredients (By Weight on Package):
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {breakdown.descending_ingredients.map((ing, i) => (
+                  <span
+                    key={i}
+                    className="inline-flex items-center gap-1 text-[11px] bg-white border border-slate-200 text-slate-700 px-2 py-0.5 rounded-md font-medium"
+                  >
+                    <span className="text-[9px] font-bold text-indigo-600 bg-indigo-50 px-1 rounded">
+                      #{i + 1}
+                    </span>
+                    {ing}
+                    {i === 0 && (
+                      <span className="text-[9px] text-emerald-700 font-bold bg-emerald-50 px-1 rounded">
+                        Highest Wt
+                      </span>
+                    )}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

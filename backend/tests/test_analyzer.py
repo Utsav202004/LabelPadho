@@ -639,5 +639,57 @@ def test_homemade_recipes_for_protein_fitness_includes_dietary_variety(analyzer)
     assert has_indian_staple is True
 
 
+def test_undeclared_ingredients_grouped_into_bracket_without_hallucinating_percentages(analyzer):
+    """
+    When a product does not specify percentages for base flours, oils, and additives,
+    our engine must NOT hallucinate fake numbers for each item. Instead, it must
+    transparently group them into an undeclared bracket in FSSAI descending order.
+    """
+    extraction = LabelExtraction(
+        product_name="Everyday Tea Biscuits",
+        ingredients=[
+            ExtractedIngredient(name="Refined Wheat Flour"),
+            ExtractedIngredient(name="Sugar"),
+            ExtractedIngredient(name="Refined Palm Oil"),
+            ExtractedIngredient(name="Invert Sugar Syrup"),
+            ExtractedIngredient(name="Iodised Salt"),
+            ExtractedIngredient(name="Raising Agents (INS 500(ii))"),
+        ],
+        nutrition_per_serving=NutritionInfo(
+            serving_size_g=100.0,
+            energy_kcal=450.0,
+            sugar_g=22.0,
+        ),
+    )
+
+    analysis = analyzer.analyze(extraction)
+    breakdown = analysis.ingredient_breakdown
+
+    assert breakdown is not None
+    # Sugar is derived from nutrition table
+    sugar_slice = next((s for s in breakdown.shares if s.category == "sweetener"), None)
+    assert sugar_slice is not None
+    assert sugar_slice.percentage == 22.0
+
+    # Grouped undeclared bracket exists
+    bracket_slice = next((s for s in breakdown.shares if s.category == "undeclared_group"), None)
+    assert bracket_slice is not None
+    assert bracket_slice.percentage == 78.0
+    assert "Undeclared" in bracket_slice.name
+
+    # Total must sum to exactly 100%
+    assert sum(s.percentage for s in breakdown.shares) == 100.0
+
+    # FSSAI disclosure must explain descending order of weight
+    assert "FSSAI" in breakdown.fssai_disclosure
+    assert "descending order of weight" in breakdown.fssai_disclosure
+
+    # Descending ingredients should list all items in printed order
+    assert breakdown.descending_ingredients[0] == "Refined Wheat Flour"
+    assert "Sugar" in breakdown.descending_ingredients[1]
+    assert len(breakdown.undeclared_ingredients) >= 4
+
+
+
 
 

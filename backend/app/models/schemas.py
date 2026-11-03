@@ -338,14 +338,27 @@ class IngredientShare(BaseModel):
 class IngredientBreakdown(BaseModel):
     """
     100% Ingredient distribution analysis.
-    Reveals the 'Hero Ingredient Illusion' (e.g., 1.2% Cashew vs 54% Maida + 22% Sugar).
+    Reveals the 'Hero Ingredient Illusion' (e.g., 1.2% Cashew vs 98.8% Base Fillers).
+    Statutorily groups undeclared ingredients in accordance with FSSAI descending order rules.
     """
     shares: list[IngredientShare] = Field(default_factory=list)
     has_hero_trap: bool = Field(default=False, description="True if an advertised hero ingredient is tiny while cheap fillers dominate")
     hero_insight: str | None = Field(default=None, description="Plain-English explanation of hero vs filler reality")
-    filler_percentage: float = Field(default=0.0, description="Sum of cheap fillers (maida, refined palm oil, sugar, syrups)")
+    filler_percentage: float = Field(default=0.0, description="Sum of cheap fillers (maida, palm oil, sugar, syrups, undeclared base)")
     hero_percentage: float = Field(default=0.0, description="Sum of advertised hero ingredients (nuts, oats, fruit, etc.)")
     coverage_percentage: float = Field(default=0.0, description="Sum of declared and derived percentages")
+    fssai_disclosure: str = Field(
+        default="",
+        description="FSSAI statutory note on QUID declaration and descending order of weight"
+    )
+    descending_ingredients: list[str] = Field(
+        default_factory=list,
+        description="All product ingredients arranged in statutory descending order of weight"
+    )
+    undeclared_ingredients: list[str] = Field(
+        default_factory=list,
+        description="Names of ingredients grouped into the undeclared bracket"
+    )
 
 
 class ClaimVerification(BaseModel):
