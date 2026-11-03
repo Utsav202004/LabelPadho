@@ -308,6 +308,29 @@ class PriceAnalysis(BaseModel):
     )
 
 
+class IngredientShare(BaseModel):
+    """A single slice in the ingredient / macro breakdown chart."""
+    name: str = Field(description="Ingredient or group name")
+    percentage: float = Field(description="Percentage share of product (0-100)")
+    is_estimated: bool = Field(default=False, description="True if mathematically derived/estimated, False if explicitly declared on label")
+    source: str = Field(default="declared", description="'declared' (QUID from label), 'nutrition_derived' (from sugar/fat in nutrition facts), or 'estimated'")
+    category: str = Field(default="other", description="hero_ingredient, flour_grain, sweetener, fat_oil, dairy, beverage_base, additive_micro, other")
+    color_hint: str = Field(default="#64748b", description="Hex color suggestion for frontend charts")
+
+
+class IngredientBreakdown(BaseModel):
+    """
+    100% Ingredient distribution analysis.
+    Reveals the 'Hero Ingredient Illusion' (e.g., 1.2% Cashew vs 54% Maida + 22% Sugar).
+    """
+    shares: list[IngredientShare] = Field(default_factory=list)
+    has_hero_trap: bool = Field(default=False, description="True if an advertised hero ingredient is tiny while cheap fillers dominate")
+    hero_insight: str | None = Field(default=None, description="Plain-English explanation of hero vs filler reality")
+    filler_percentage: float = Field(default=0.0, description="Sum of cheap fillers (maida, refined palm oil, sugar, syrups)")
+    hero_percentage: float = Field(default=0.0, description="Sum of advertised hero ingredients (nuts, oats, fruit, etc.)")
+    coverage_percentage: float = Field(default=0.0, description="Sum of declared and derived percentages")
+
+
 class ClaimVerification(BaseModel):
     """
     Verification of front-of-pack claims against actual ingredients & nutrition numbers.
@@ -351,6 +374,10 @@ class ProductAnalysis(BaseModel):
     ingredient_flags: list[IngredientFlag] = Field(default_factory=list)
     serving_reality: ServingReality | None = None
     price_analysis: PriceAnalysis | None = None
+    ingredient_breakdown: IngredientBreakdown | None = Field(
+        None,
+        description="Calculated 100% ingredient share distribution for pie/donut chart visualization"
+    )
     natural_alternatives: list[NaturalAlternative] = Field(default_factory=list)
     educational_notes: list[EducationalNote] = Field(default_factory=list)
 

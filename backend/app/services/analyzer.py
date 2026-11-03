@@ -46,7 +46,10 @@ from pathlib import Path
 from app.models.schemas import (
     ClaimVerification,
     EducationalNote,
+    ExtractedIngredient,
+    IngredientBreakdown,
     IngredientFlag,
+    IngredientShare,
     LabelExtraction,
     MathVerification,
     NaturalAlternative,
@@ -182,6 +185,7 @@ class Analyzer:
         edu_notes = self._generate_educational_notes(extraction, flags, learned_topics)
         claim_verifications = self._verify_front_claims(extraction)
         math_verification = self._verify_nutrition_math(extraction)
+        ingredient_breakdown = self._analyze_ingredient_breakdown(extraction)
 
         # Compute health score with category awareness
         health_score = self._compute_health_score(extraction, flags)
@@ -205,6 +209,7 @@ class Analyzer:
             ingredient_flags=flags,
             serving_reality=serving,
             price_analysis=price,
+            ingredient_breakdown=ingredient_breakdown,
             natural_alternatives=alternatives,
             educational_notes=edu_notes,
             claim_verifications=claim_verifications,
@@ -1565,5 +1570,288 @@ class Analyzer:
             discrepancy_percentage=diff_pct,
             is_discrepant=is_discrepant,
             details=details,
+        )
+
+    # ========================================================
+    # Analysis Layer 8: 100% Ingredient Share Breakdown & Hero Trap
+    # ========================================================
+
+    def _analyze_ingredient_breakdown(self, extraction: LabelExtraction) -> IngredientBreakdown:
+        """
+        Computes 100% ingredient distribution for pie chart visualization.
+        Exposes the 'Hero Ingredient Illusion' (e.g. 1.2% Cashew vs 54% Maida + 22% Sugar).
+
+        Uses a 3-tier deterministic strategy:
+        1. Declared QUID percentages from the ingredients list (e.g., 'Cashew (1.2%)', 'Maida (54%)').
+        2. Macro-derived shares from the nutrition facts table (e.g. sugar and fat per 100g).
+        3. Normalization of remaining base flours/water and micro-additives to 100%.
+        """
+        import re
+
+        ingredients = extraction.ingredients or []
+        if not ingredients:
+            return IngredientBreakdown()
+
+        # Helper to get per-100g nutrition
+        nut = extraction.nutrition_per_100g
+        if not nut and extraction.nutrition_per_serving:
+            serving_g = extraction.nutrition_per_serving.serving_size_g
+            if serving_g and serving_g > 0:
+                mult = 100.0 / serving_g
+                nut = NutritionInfo(
+                    serving_size_g=100.0,
+                    energy_kcal=(extraction.nutrition_per_serving.energy_kcal or 0) * mult,
+                    protein_g=(extraction.nutrition_per_serving.protein_g or 0) * mult,
+                    total_fat_g=(extraction.nutrition_per_serving.total_fat_g or 0) * mult,
+                    carbohydrates_g=(extraction.nutrition_per_serving.carbohydrates_g or 0) * mult,
+                    sugar_g=(extraction.nutrition_per_serving.sugar_g or 0) * mult,
+                    added_sugar_g=(extraction.nutrition_per_serving.added_sugar_g or 0) * mult,
+                    sodium_mg=(extraction.nutrition_per_serving.sodium_mg or 0) * mult,
+                    fiber_g=(extraction.nutrition_per_serving.fiber_g or 0) * mult,
+                )
+            else:
+                nut = extraction.nutrition_per_serving
+
+        HERO_KEYWORDS = [
+            "cashew", "kaju", "almond", "badam", "walnut", "akhrot", "pistachio", "pista",
+            "hazelnut", "peanut", "chia", "flax", "pumpkin seed", "sunflower seed",
+            "oats", "rolled oats", "ragi", "millet", "jowar", "bajra", "quinoa",
+            "fruit", "mango", "apple", "berry", "strawberry", "cranberry", "orange",
+            "raisin", "kishmish", "dates", "fig", "kesar", "saffron", "honey", "butter", "cocoa"
+        ]
+        FILLER_GRAIN_KEYWORDS = [
+            "refined wheat flour", "maida", "wheat flour", "atta", "corn flour", "starch",
+            "tapioca", "maltodextrin", "rice flour", "potato", "semolina", "suji", "cereal"
+        ]
+        FAT_OIL_KEYWORDS = [
+            "palm oil", "palmolein", "edible vegetable oil", "vegetable oil", "cottonseed",
+            "sunflower oil", "soybean oil", "vanaspati", "hydrogenated", "fat", "shortening"
+        ]
+        SWEETENER_KEYWORDS = [
+            "sugar", "invert sugar", "invert syrup", "liquid glucose", "glucose", "sucrose",
+            "corn syrup", "dextrose", "fructose", "jaggery", "caramel"
+        ]
+        BEVERAGE_BASE_KEYWORDS = [
+            "carbonated water", "water", "reconstituted", "juice concentrate", "mineral water"
+        ]
+        ADDITIVE_KEYWORDS = [
+            "raising agent", "emulsifier", "ins ", "ins5", "ins4", "ins3", "ins2", "ins1",
+            "acidity regulator", "preservative", "flavor", "colour", "salt", "iodised salt",
+            "leavening", "baking powder", "thickener"
+        ]
+
+        def get_category_and_color(name_lower: str) -> tuple[str, str]:
+            if any(k in name_lower for k in HERO_KEYWORDS):
+                return "hero_ingredient", "#10b981"  # Emerald
+            if any(k in name_lower for k in FILLER_GRAIN_KEYWORDS):
+                return "flour_grain", "#3b82f6"  # Blue
+            if any(k in name_lower for k in FAT_OIL_KEYWORDS):
+                return "fat_oil", "#f59e0b"  # Amber
+            if any(k in name_lower for k in SWEETENER_KEYWORDS):
+                return "sweetener", "#ef4444"  # Red
+            if any(k in name_lower for k in BEVERAGE_BASE_KEYWORDS):
+                return "beverage_base", "#06b6d4"  # Cyan
+            if any(k in name_lower for k in ADDITIVE_KEYWORDS):
+                return "additive_micro", "#94a3b8"  # Slate
+            return "other", "#64748b"
+
+        def clean_ing_name(name: str) -> str:
+            cleaned = re.sub(r"\(?\s*\d+(?:\.\d+)?\s*%\s*\)?", "", name).strip()
+            return cleaned.rstrip(",.-;: ") or name
+
+        def parse_declared_pct(ing: ExtractedIngredient) -> float | None:
+            if ing.percentage is not None and ing.percentage > 0:
+                return float(ing.percentage)
+            m = re.search(r"\(?\s*(\d+(?:\.\d+)?)\s*%\s*\)?", ing.name)
+            if m:
+                try:
+                    val = float(m.group(1))
+                    if 0 < val <= 100:
+                        return val
+                except ValueError:
+                    pass
+            return None
+
+        shares: list[IngredientShare] = []
+        seen_names = set()
+
+        # Step 1: Collect all declared QUID ingredients
+        for ing in ingredients:
+            pct = parse_declared_pct(ing)
+            clean_name = clean_ing_name(ing.name)
+            cat, color = get_category_and_color(clean_name.lower())
+            if pct is not None and clean_name.lower() not in seen_names:
+                shares.append(IngredientShare(
+                    name=clean_name,
+                    percentage=round(pct, 1),
+                    is_estimated=False,
+                    source="declared",
+                    category=cat,
+                    color_hint=color,
+                ))
+                seen_names.add(clean_name.lower())
+
+        # Step 2: Macro derivation for undeclared major groups (Sweeteners, Fats, Water)
+        has_sweetener = any(s.category == "sweetener" for s in shares)
+        has_fat = any(s.category == "fat_oil" for s in shares)
+        has_water = any(s.category == "beverage_base" for s in shares)
+
+        # Check for undeclared sweeteners
+        if not has_sweetener and nut and nut.sugar_g is not None and nut.sugar_g > 0:
+            sweetener_ings = [
+                clean_ing_name(i.name) for i in ingredients
+                if any(k in i.name.lower() for k in SWEETENER_KEYWORDS)
+            ]
+            if sweetener_ings:
+                display_name = sweetener_ings[0] if len(sweetener_ings) == 1 else "Sugar & Syrups"
+                sugar_share = min(nut.sugar_g, 90.0)
+                shares.append(IngredientShare(
+                    name=display_name,
+                    percentage=round(sugar_share, 1),
+                    is_estimated=True,
+                    source="nutrition_derived",
+                    category="sweetener",
+                    color_hint="#ef4444",
+                ))
+                for s_name in sweetener_ings:
+                    seen_names.add(s_name.lower())
+
+        # Check for undeclared edible fats / oils
+        if not has_fat and nut and nut.total_fat_g is not None and nut.total_fat_g > 0:
+            fat_ings = [
+                clean_ing_name(i.name) for i in ingredients
+                if any(k in i.name.lower() for k in FAT_OIL_KEYWORDS)
+            ]
+            if fat_ings:
+                display_name = fat_ings[0] if len(fat_ings) == 1 else "Edible Vegetable Fats"
+                fat_share = min(nut.total_fat_g, 90.0)
+                shares.append(IngredientShare(
+                    name=display_name,
+                    percentage=round(fat_share, 1),
+                    is_estimated=True,
+                    source="nutrition_derived",
+                    category="fat_oil",
+                    color_hint="#f59e0b",
+                ))
+                for f_name in fat_ings:
+                    seen_names.add(f_name.lower())
+
+        # Beverage base (Water) derivation for drinks
+        is_beverage = extraction.product_category in (ProductCategory.BEVERAGE_SODA, ProductCategory.BEVERAGE_JUICE)
+        if (is_beverage or any(any(k in i.name.lower() for k in BEVERAGE_BASE_KEYWORDS) for i in ingredients)) and not has_water:
+            water_ings = [
+                clean_ing_name(i.name) for i in ingredients
+                if any(k in i.name.lower() for k in BEVERAGE_BASE_KEYWORDS)
+            ]
+            water_name = water_ings[0] if water_ings else "Water"
+            current_sum = sum(s.percentage for s in shares)
+            if current_sum < 98.0:
+                water_share = max(round(100.0 - current_sum - 1.0, 1), 5.0)
+                shares.insert(0, IngredientShare(
+                    name=water_name,
+                    percentage=water_share,
+                    is_estimated=True,
+                    source="nutrition_derived",
+                    category="beverage_base",
+                    color_hint="#06b6d4",
+                ))
+                seen_names.add(water_name.lower())
+
+        # Step 3: Base flour / grain estimation if undeclared
+        current_sum = sum(s.percentage for s in shares)
+        if current_sum < 96.0:
+            undeclared_grains = [
+                clean_ing_name(i.name) for i in ingredients
+                if any(k in i.name.lower() for k in FILLER_GRAIN_KEYWORDS) and clean_ing_name(i.name).lower() not in seen_names
+            ]
+            if undeclared_grains:
+                primary_grain = undeclared_grains[0]
+                grain_share = max(round(100.0 - current_sum - 3.5, 1), 10.0)
+                shares.insert(0, IngredientShare(
+                    name=primary_grain,
+                    percentage=grain_share,
+                    is_estimated=True,
+                    source="estimated",
+                    category="flour_grain",
+                    color_hint="#3b82f6",
+                ))
+                seen_names.add(primary_grain.lower())
+
+        # Step 4: Normalization & Micro-Additives Remainder
+        # Declared QUID percentages are statutory ground truth — preserve them exactly.
+        declared_sum = sum(s.percentage for s in shares if not s.is_estimated)
+        derived_slices = [s for s in shares if s.is_estimated]
+        derived_sum = sum(s.percentage for s in derived_slices)
+
+        if declared_sum + derived_sum > 100.0 and derived_slices:
+            available_budget = max(100.0 - declared_sum, 0.0)
+            if derived_sum > 0:
+                scale = available_budget / derived_sum
+                for s in derived_slices:
+                    s.percentage = round(s.percentage * scale, 1)
+        elif declared_sum + derived_sum < 99.5:
+            remainder = round(100.0 - (declared_sum + derived_sum), 1)
+            if remainder >= 0.5:
+                shares.append(IngredientShare(
+                    name="Micro-Additives, Salt & Flavors",
+                    percentage=remainder,
+                    is_estimated=True,
+                    source="estimated",
+                    category="additive_micro",
+                    color_hint="#94a3b8",
+                ))
+
+        # Fine-tune rounding difference on estimated/derived slices so declared slices remain pristine
+        diff = round(100.0 - sum(s.percentage for s in shares), 1)
+        if shares and abs(diff) > 0:
+            candidate_slices = [s for s in shares if s.is_estimated] or shares
+            target_slice = max(candidate_slices, key=lambda s: s.percentage)
+            target_slice.percentage = round(target_slice.percentage + diff, 1)
+
+        # Step 5: Hero Ingredient Trap Audit
+        hero_shares = [s for s in shares if s.category == "hero_ingredient"]
+        filler_shares = [s for s in shares if s.category in ("flour_grain", "fat_oil", "sweetener")]
+        filler_total = sum(s.percentage for s in filler_shares)
+        hero_total = sum(s.percentage for s in hero_shares)
+
+        has_hero_trap = False
+        hero_insight = None
+
+        product_text = f"{extraction.product_name or ''} {' '.join(extraction.claims or [])}".lower()
+
+        # Check for specific advertised hero ingredients
+        for hs in hero_shares:
+            hs_name_clean = hs.name.lower()
+            if any(k in product_text for k in [hs_name_clean, "nut", "dry fruit", "oat", "kaju", "badam", "cashew", "almond", "fruit", "kesar"]):
+                if hs.percentage <= 6.0 and filler_total >= 50.0:
+                    has_hero_trap = True
+                    filler_names = ", ".join(f.name for f in filler_shares[:3])
+                    hero_insight = (
+                        f"Packaging prominently advertises '{hs.name}', but it constitutes only "
+                        f"{hs.percentage:.1f}% of the product. The overwhelming bulk is cheap fillers "
+                        f"({filler_names}) totaling {filler_total:.1f}%."
+                    )
+                    break
+
+        # Check for high sugar beverage trap
+        if not has_hero_trap and is_beverage:
+            sweetener_shares = [s for s in shares if s.category == "sweetener"]
+            sweetener_pct = sum(s.percentage for s in sweetener_shares)
+            if sweetener_pct >= 10.0:
+                has_hero_trap = True
+                hero_insight = (
+                    f"Over {sweetener_pct:.1f}% of this beverage is pure sugar. "
+                    f"You are drinking predominantly flavored liquid sugar with minimal active nutrition."
+                )
+
+        coverage = sum(s.percentage for s in shares if not s.is_estimated or s.source == "nutrition_derived")
+
+        return IngredientBreakdown(
+            shares=shares,
+            has_hero_trap=has_hero_trap,
+            hero_insight=hero_insight,
+            filler_percentage=round(filler_total, 1),
+            hero_percentage=round(hero_total, 1),
+            coverage_percentage=round(coverage, 1),
         )
 

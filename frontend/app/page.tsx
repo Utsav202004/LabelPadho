@@ -15,7 +15,8 @@ import {
   History,
   ScanLine,
   Trash2,
-  ArrowRight
+  ArrowRight,
+  PieChart
 } from "lucide-react";
 
 interface NutritionInfo {
@@ -86,6 +87,24 @@ interface PriceAnalysis {
   value_verdict: string;
 }
 
+interface IngredientShare {
+  name: string;
+  percentage: number;
+  is_estimated: boolean;
+  source: string;
+  category: string;
+  color_hint: string;
+}
+
+interface IngredientBreakdown {
+  shares: IngredientShare[];
+  has_hero_trap: boolean;
+  hero_insight?: string;
+  filler_percentage: number;
+  hero_percentage: number;
+  coverage_percentage: number;
+}
+
 interface ServingReality {
   servings_in_package?: number;
   expected_consumption_g?: number;
@@ -113,6 +132,7 @@ interface ProductAnalysis {
   claim_verifications: ClaimVerification[];
   math_verification?: MathVerification;
   price_analysis?: PriceAnalysis;
+  ingredient_breakdown?: IngredientBreakdown;
   serving_reality?: ServingReality;
   natural_alternatives: NaturalAlternative[];
   educational_notes: EducationalNote[];
@@ -223,6 +243,21 @@ const DEMO_AUDIT: ProductAnalysis = {
     price_inr: 45,
     value_verdict: "Priced at ₹45. You are paying a 2x premium over basic biscuits primarily for health marketing, not whole grain nutrition.",
   },
+  ingredient_breakdown: {
+    has_hero_trap: true,
+    hero_insight: "Packaging prominently advertises 'Rolled Oats', but it constitutes only 4.0% of the cookie. In contrast, cheap fillers (Refined Wheat Flour (Maida), Sugar & Syrups, Refined Palm Oil) make up 92.0%.",
+    hero_percentage: 4.0,
+    filler_percentage: 92.0,
+    coverage_percentage: 92.0,
+    shares: [
+      { name: "Refined Wheat Flour (Maida)", percentage: 54.0, is_estimated: false, source: "declared", category: "flour_grain", color_hint: "#3b82f6" },
+      { name: "Sugar & Invert Syrup", percentage: 22.0, is_estimated: true, source: "nutrition_derived", category: "sweetener", color_hint: "#ef4444" },
+      { name: "Refined Palm Oil", percentage: 16.0, is_estimated: true, source: "nutrition_derived", category: "fat_oil", color_hint: "#f59e0b" },
+      { name: "Wheat Flour (Atta)", percentage: 7.0, is_estimated: false, source: "declared", category: "flour_grain", color_hint: "#60a5fa" },
+      { name: "Rolled Oats", percentage: 4.0, is_estimated: false, source: "declared", category: "hero_ingredient", color_hint: "#10b981" },
+      { name: "Raising Agents & Salt", percentage: 3.0, is_estimated: true, source: "estimated", category: "additive_micro", color_hint: "#94a3b8" },
+    ],
+  },
   natural_alternatives: [
     {
       nutrient: "clean sweet craving",
@@ -277,6 +312,18 @@ const DEMO_AUDITS: { label: string; analysis: ProductAnalysis }[] = [
       detailed_summary: "Liquid sugar is easy to consume quickly and is not as filling as food.",
       claim_verifications: [{ claim: "Refreshing", status: "misleading", explanation: "The slogan does not change the bottle's 31.5g added sugar load.", fssai_rule: "Consumer-facing nutrition context" }],
       price_analysis: undefined,
+      ingredient_breakdown: {
+        has_hero_trap: true,
+        hero_insight: "Over 10.5% of this drink is pure sugar (31.5g per bottle). You are drinking predominantly flavored carbonated water with concentrated sweeteners.",
+        hero_percentage: 0,
+        filler_percentage: 10.5,
+        coverage_percentage: 10.5,
+        shares: [
+          { name: "Carbonated Water", percentage: 89.0, is_estimated: true, source: "nutrition_derived", category: "beverage_base", color_hint: "#06b6d4" },
+          { name: "Sugar", percentage: 10.5, is_estimated: true, source: "nutrition_derived", category: "sweetener", color_hint: "#ef4444" },
+          { name: "Caramel Colour & Acidity Regulators", percentage: 0.5, is_estimated: true, source: "estimated", category: "additive_micro", color_hint: "#94a3b8" },
+        ],
+      },
     },
   },
   {
@@ -307,6 +354,19 @@ const DEMO_AUDITS: { label: string; analysis: ProductAnalysis }[] = [
       detailed_summary: "Fruit imagery should not be confused with the fibre and fullness of whole fruit.",
       claim_verifications: [{ claim: "Made with Real Mango", status: "verified", explanation: "Mango pulp is listed, but only at 12%; the nutrition panel still shows 19g added sugar.", fssai_rule: "Ingredient-list cross-check" }],
       price_analysis: undefined,
+      ingredient_breakdown: {
+        has_hero_trap: true,
+        hero_insight: "Packaging highlights Real Mango, but mango pulp makes up only 12.0%. The rest is predominantly 73.5% water and 13.5% added liquid sugars.",
+        hero_percentage: 12.0,
+        filler_percentage: 13.5,
+        coverage_percentage: 25.5,
+        shares: [
+          { name: "Water", percentage: 73.5, is_estimated: true, source: "nutrition_derived", category: "beverage_base", color_hint: "#06b6d4" },
+          { name: "Sugar", percentage: 13.5, is_estimated: true, source: "nutrition_derived", category: "sweetener", color_hint: "#ef4444" },
+          { name: "Mango Pulp", percentage: 12.0, is_estimated: false, source: "declared", category: "hero_ingredient", color_hint: "#10b981" },
+          { name: "Acidity Regulators & Stabilizers", percentage: 1.0, is_estimated: true, source: "estimated", category: "additive_micro", color_hint: "#94a3b8" },
+        ],
+      },
     },
   },
   {
@@ -325,6 +385,182 @@ const DEMO_AUDITS: { label: string; analysis: ProductAnalysis }[] = [
     },
   },
 ];
+
+function IngredientDonutChart({ breakdown }: { breakdown?: IngredientBreakdown }) {
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+
+  if (!breakdown || !breakdown.shares || breakdown.shares.length === 0) return null;
+
+  const shares = breakdown.shares;
+  const radius = 38;
+  const circumference = 2 * Math.PI * radius; // ~238.76
+
+  let accumulatedPercent = 0;
+  const activeIndex = hoveredIndex !== null ? hoveredIndex : 0;
+  const activeShare = shares[activeIndex] || shares[0];
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+        <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+          <PieChart className="w-5 h-5 text-indigo-600" />
+          What You're Actually Consuming (100% Ingredient Breakdown)
+        </h3>
+        <span className="text-xs text-slate-500 font-medium bg-slate-100 px-2.5 py-1 rounded-full w-fit">
+          FSSAI QUID + Macro Reconstruction
+        </span>
+      </div>
+
+      {breakdown.has_hero_trap && breakdown.hero_insight && (
+        <div className="mb-6 p-4 rounded-xl border border-amber-300 bg-amber-50/80 flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+          <div>
+            <span className="text-xs font-bold uppercase tracking-wider text-amber-900 block mb-0.5">
+              Hero Ingredient Illusion Caught
+            </span>
+            <p className="text-xs sm:text-sm text-amber-950 leading-relaxed font-medium">
+              {breakdown.hero_insight}
+            </p>
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
+        {/* SVG Donut */}
+        <div className="md:col-span-5 flex flex-col items-center justify-center">
+          <div className="relative w-48 h-48 sm:w-56 sm:h-56">
+            <svg viewBox="0 0 100 100" className="w-full h-full transform -rotate-90">
+              <circle
+                cx="50"
+                cy="50"
+                r={radius}
+                className="stroke-slate-100 fill-none"
+                strokeWidth="14"
+              />
+              {shares.map((share, idx) => {
+                const strokeDasharray = `${(share.percentage / 100) * circumference} ${circumference}`;
+                const strokeDashoffset = -((accumulatedPercent / 100) * circumference);
+                accumulatedPercent += share.percentage;
+                const isHovered = hoveredIndex === idx;
+
+                return (
+                  <circle
+                    key={idx}
+                    cx="50"
+                    cy="50"
+                    r={radius}
+                    fill="none"
+                    stroke={share.color_hint || "#64748b"}
+                    strokeWidth={isHovered ? 18 : 14}
+                    strokeDasharray={strokeDasharray}
+                    strokeDashoffset={strokeDashoffset}
+                    className="transition-all duration-200 cursor-pointer"
+                    onMouseEnter={() => setHoveredIndex(idx)}
+                    onMouseLeave={() => setHoveredIndex(null)}
+                  />
+                );
+              })}
+            </svg>
+
+            {/* Center Label inside Donut Hole */}
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-3 pointer-events-none">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400">
+                {activeShare.category === "hero_ingredient"
+                  ? "Hero Ingredient"
+                  : activeShare.category === "sweetener"
+                  ? "Sweetener"
+                  : activeShare.category === "fat_oil"
+                  ? "Edible Fat"
+                  : activeShare.category === "flour_grain"
+                  ? "Base Flour"
+                  : activeShare.category === "beverage_base"
+                  ? "Liquid Base"
+                  : "Ingredient"}
+              </span>
+              <span className="text-3xl font-extrabold text-slate-900 leading-tight">
+                {activeShare.percentage}%
+              </span>
+              <span className="text-xs font-semibold text-slate-700 truncate max-w-[130px]">
+                {activeShare.name}
+              </span>
+              <span className="text-[9px] text-slate-400 font-medium mt-0.5">
+                {activeShare.source === "declared" ? "Declared on Label" : "Derived from Macros"}
+              </span>
+            </div>
+          </div>
+          <span className="text-[11px] text-slate-400 mt-2 text-center">
+            Hover over slices to inspect each ingredient
+          </span>
+        </div>
+
+        {/* Legend / Breakdown List */}
+        <div className="md:col-span-7 space-y-2">
+          <div className="flex items-center justify-between text-xs text-slate-500 font-semibold px-2 pb-1 border-b border-slate-100">
+            <span>Ingredient & Group</span>
+            <span>Share (% by wt)</span>
+          </div>
+
+          <div className="max-h-60 overflow-y-auto space-y-1.5 pr-1">
+            {shares.map((share, idx) => {
+              const isHovered = hoveredIndex === idx;
+              return (
+                <div
+                  key={idx}
+                  onMouseEnter={() => setHoveredIndex(idx)}
+                  onMouseLeave={() => setHoveredIndex(null)}
+                  className={`p-2 rounded-xl border transition cursor-pointer flex items-center justify-between text-xs ${
+                    isHovered
+                      ? "bg-slate-50 border-slate-400 shadow-xs"
+                      : "bg-white border-slate-200/80 hover:bg-slate-50/60"
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                    <span
+                      className="w-3.5 h-3.5 rounded-md flex-shrink-0"
+                      style={{ backgroundColor: share.color_hint || "#64748b" }}
+                    />
+                    <div className="truncate">
+                      <span className="font-bold text-slate-900 block truncate">
+                        {share.name}
+                      </span>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span
+                          className={`text-[9px] font-semibold px-1.5 py-0.2 rounded ${
+                            share.source === "declared"
+                              ? "bg-emerald-100 text-emerald-800"
+                              : "bg-slate-100 text-slate-600"
+                          }`}
+                        >
+                          {share.source === "declared" ? "Declared QUID" : "Derived from Nutrition"}
+                        </span>
+                        {share.category === "hero_ingredient" && (
+                          <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-100 text-amber-800">
+                            Advertised Hero
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="text-right flex-shrink-0">
+                    <span className="text-sm font-extrabold text-slate-900">
+                      {share.percentage}%
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+            <span>Declared & Derived Coverage: <strong>{breakdown.coverage_percentage}%</strong></span>
+            <span>Total Sum: <strong>100%</strong></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<"scan" | "history">("scan");
@@ -672,6 +908,11 @@ export default function Home() {
                   </div>
                 )}
               </div>
+
+              {/* 100% Ingredient Distribution & Hero Trap Pie Chart */}
+              {analysis.ingredient_breakdown && (
+                <IngredientDonutChart breakdown={analysis.ingredient_breakdown} />
+              )}
 
               {/* Claim Verification Layer (Glucose Gal / FoodPharmer style) */}
               {analysis.claim_verifications && analysis.claim_verifications.length > 0 && (

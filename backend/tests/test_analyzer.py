@@ -447,3 +447,137 @@ def test_dynamic_unseen_marketing_claims_are_preserved(analyzer):
     assert unseen_check.status == "debunked"
     assert "cognitive" in unseen_check.explanation
 
+
+def test_cashew_biscuit_hero_ingredient_trap(analyzer):
+    """
+    Exposes the classic Indian bakery trap:
+    'Cashew Butter Biscuit' has 1.2% cashew, while Maida (54%), Palm Oil and Sugar make up the rest.
+    """
+    extraction = LabelExtraction(
+        product_name="Rich Cashew Delite Biscuits",
+        claims=["Rich in Cashews", "Goodness of Butter"],
+        ingredients=[
+            ExtractedIngredient(name="Refined Wheat Flour (Maida) (54%)"),
+            ExtractedIngredient(name="Refined Palm Oil"),
+            ExtractedIngredient(name="Sugar"),
+            ExtractedIngredient(name="Cashew (1.2%)"),
+            ExtractedIngredient(name="Raising Agents (INS 500(ii))"),
+        ],
+        nutrition_per_serving=NutritionInfo(
+            serving_size_g=100.0,
+            energy_kcal=480.0,
+            protein_g=6.0,
+            total_fat_g=20.0,
+            carbohydrates_g=68.0,
+            sugar_g=24.0,
+        ),
+    )
+
+    analysis = analyzer.analyze(extraction)
+    breakdown = analysis.ingredient_breakdown
+
+    assert breakdown is not None
+    assert breakdown.has_hero_trap is True
+    assert "Cashew" in breakdown.hero_insight
+    assert breakdown.hero_percentage == 1.2
+    assert breakdown.filler_percentage >= 50.0
+
+    # Ensure total shares sum to 100%
+    total_pct = sum(s.percentage for s in breakdown.shares)
+    assert abs(total_pct - 100.0) < 0.2
+
+    # Check that cashew is tagged as hero_ingredient and maida as flour_grain
+    cashew_share = next((s for s in breakdown.shares if "cashew" in s.name.lower()), None)
+    assert cashew_share is not None
+    assert cashew_share.category == "hero_ingredient"
+    assert cashew_share.percentage == 1.2
+    assert cashew_share.source == "declared"
+
+
+def test_beverage_sugar_trap_breakdown(analyzer):
+    """
+    Ensures that high-sugar beverages like sodas are broken down accurately into water + sugar.
+    """
+    extraction = LabelExtraction(
+        product_name="Carbonated Fizz Drink",
+        product_category=ProductCategory.BEVERAGE_SODA,
+        ingredients=[
+            ExtractedIngredient(name="Carbonated Water"),
+            ExtractedIngredient(name="Sugar"),
+            ExtractedIngredient(name="Acidity Regulator (INS 338)"),
+            ExtractedIngredient(name="Caramel Colour (INS 150d)"),
+        ],
+        nutrition_per_serving=NutritionInfo(
+            serving_size_g=100.0,
+            energy_kcal=44.0,
+            carbohydrates_g=11.0,
+            sugar_g=11.0,
+        ),
+    )
+
+    analysis = analyzer.analyze(extraction)
+    breakdown = analysis.ingredient_breakdown
+
+    assert breakdown is not None
+    assert breakdown.has_hero_trap is True
+    assert "pure sugar" in breakdown.hero_insight.lower()
+
+    # Total should sum to 100%
+    total_pct = sum(s.percentage for s in breakdown.shares)
+    assert abs(total_pct - 100.0) < 0.2
+
+    # Sweetener slice should be ~11%
+    sweetener = next((s for s in breakdown.shares if s.category == "sweetener"), None)
+    assert sweetener is not None
+    assert sweetener.percentage == 11.0
+
+
+def test_multigrain_biscuit_ingredient_pie_breakdown(analyzer):
+    """
+    Verifies that a multigrain biscuit correctly exposes that 54% is Maida,
+    while Oats (the advertised grain) is only 4%.
+    """
+    extraction = LabelExtraction(
+        product_name="Nutri-Digestive Multigrain Biscuit",
+        claims=["Multigrain", "Rich in Oats"],
+        ingredients=[
+            ExtractedIngredient(name="Refined Wheat Flour (Maida) (54%)"),
+            ExtractedIngredient(name="Refined Palm Oil"),
+            ExtractedIngredient(name="Sugar"),
+            ExtractedIngredient(name="Wheat Flour (Atta) (7%)"),
+            ExtractedIngredient(name="Rolled Oats (4%)"),
+            ExtractedIngredient(name="Raising Agents"),
+        ],
+        nutrition_per_serving=NutritionInfo(
+            serving_size_g=25.0,
+            energy_kcal=118.0,
+            protein_g=2.1,
+            total_fat_g=4.4,
+            carbohydrates_g=17.5,
+            sugar_g=6.2,
+        ),
+    )
+
+    analysis = analyzer.analyze(extraction)
+    breakdown = analysis.ingredient_breakdown
+
+    assert breakdown is not None
+    assert breakdown.has_hero_trap is True
+    assert "Rolled Oats" in breakdown.hero_insight or "oat" in breakdown.hero_insight.lower()
+
+    # Total should sum to 100%
+    total_pct = sum(s.percentage for s in breakdown.shares)
+    assert abs(total_pct - 100.0) < 0.2
+
+    # Verify individual slices
+    oats = next((s for s in breakdown.shares if "oat" in s.name.lower()), None)
+    assert oats is not None
+    assert oats.percentage == 4.0
+    assert oats.category == "hero_ingredient"
+
+    atta = next((s for s in breakdown.shares if "atta" in s.name.lower()), None)
+    assert atta is not None
+    assert atta.percentage == 7.0
+
+
+
