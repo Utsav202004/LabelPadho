@@ -580,4 +580,64 @@ def test_multigrain_biscuit_ingredient_pie_breakdown(analyzer):
     assert atta.percentage == 7.0
 
 
+def test_homemade_recipes_suggested_for_dessert_category(analyzer):
+    """
+    Ensure quick Indian homemade recipes are suggested for sweet treats with dietary classification.
+    """
+    extraction = LabelExtraction(
+        product_name="Chocolate Delite Cookies",
+        product_category=ProductCategory.DESSERT_SWEET,
+        ingredients=[
+            ExtractedIngredient(name="Refined Wheat Flour"),
+            ExtractedIngredient(name="Sugar"),
+            ExtractedIngredient(name="Palm Oil"),
+        ],
+        nutrition_per_serving=NutritionInfo(serving_size_g=50, energy_kcal=240, sugar_g=18),
+    )
+
+    analysis = analyzer.analyze(extraction)
+    recipes = analysis.homemade_recipes
+
+    assert len(recipes) >= 2
+    # Verify recipes have dietary flags
+    dietary_types = {r.dietary_type for r in recipes}
+    assert any(d in ("veg", "egg", "non_veg") for d in dietary_types)
+
+    # Check recipe structure
+    first = recipes[0]
+    assert first.prep_time_minutes <= 15
+    assert len(first.hero_ingredients) >= 2
+    assert len(first.instructions) > 10
+    assert "palm oil" in first.why_better.lower() or "fiber" in first.why_better.lower() or "magnesium" in first.why_better.lower()
+
+
+def test_homemade_recipes_for_protein_fitness_includes_dietary_variety(analyzer):
+    """
+    Ensure protein category suggests high-protein Indian staples like Sattu, Paneer, or Eggs.
+    """
+    extraction = LabelExtraction(
+        product_name="Ultra Whey Protein Bar",
+        product_category=ProductCategory.PROTEIN_FITNESS,
+        ingredients=[
+            ExtractedIngredient(name="Soy Protein Isolate"),
+            ExtractedIngredient(name="Glucose Syrup"),
+            ExtractedIngredient(name="Palm Fat"),
+        ],
+        nutrition_per_serving=NutritionInfo(serving_size_g=60, energy_kcal=220, protein_g=20),
+    )
+
+    analysis = analyzer.analyze(extraction)
+    recipes = analysis.homemade_recipes
+
+    assert len(recipes) >= 2
+    names = [r.name for r in recipes]
+    # At least one Indian kitchen staple should be recommended
+    has_indian_staple = any(
+        any(k in n.lower() for k in ["sattu", "paneer", "egg", "chicken"])
+        for n in names
+    )
+    assert has_indian_staple is True
+
+
+
 

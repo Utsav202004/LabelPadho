@@ -272,6 +272,23 @@ class NaturalAlternative(BaseModel):
     )
 
 
+class HomemadeRecipe(BaseModel):
+    """
+    Quick, accessible Indian homemade recipe alternative to packaged food cravings.
+    Tagged specifically with Indian dietary classification (veg, contains egg, non-veg).
+    """
+    id: str = Field(description="Unique recipe identifier")
+    name: str = Field(description="Name of the homemade dish")
+    category: ProductCategory = Field(description="Food category this recipe replaces")
+    dietary_type: str = Field(description="'veg' (pure vegetarian), 'egg' (contains egg), or 'non_veg' (contains meat/poultry/seafood)")
+    prep_time_minutes: int = Field(description="Preparation time in minutes (typically 3-12 mins)")
+    target_craving: str = Field(description="The packaged food craving this satisfies")
+    hero_ingredients: list[str] = Field(default_factory=list, description="Common Indian kitchen ingredients needed")
+    instructions: str = Field(description="Quick, straightforward preparation steps")
+    why_better: str = Field(description="Why this beats the packaged version (no palm oil, real whole ingredients, cost)")
+    approx_cost_inr: float = Field(description="Estimated cost in INR per serving")
+
+
 class EducationalNote(BaseModel):
     """
     A teaching moment for the user.
@@ -379,6 +396,10 @@ class ProductAnalysis(BaseModel):
         description="Calculated 100% ingredient share distribution for pie/donut chart visualization"
     )
     natural_alternatives: list[NaturalAlternative] = Field(default_factory=list)
+    homemade_recipes: list[HomemadeRecipe] = Field(
+        default_factory=list,
+        description="Quick Indian homemade kitchen recipes matching category & cravings"
+    )
     educational_notes: list[EducationalNote] = Field(default_factory=list)
 
     # Verification layers (Front-of-pack claims vs back reality + Calorie balance)

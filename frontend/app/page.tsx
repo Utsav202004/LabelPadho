@@ -16,7 +16,10 @@ import {
   ScanLine,
   Trash2,
   ArrowRight,
-  PieChart
+  PieChart,
+  ChefHat,
+  Clock,
+  Utensils
 } from "lucide-react";
 
 interface NutritionInfo {
@@ -113,6 +116,19 @@ interface ServingReality {
   realistic_consumption: string;
 }
 
+interface HomemadeRecipe {
+  id: string;
+  name: string;
+  category: string;
+  dietary_type: "veg" | "egg" | "non_veg";
+  prep_time_minutes: number;
+  target_craving: string;
+  hero_ingredients: string[];
+  instructions: string;
+  why_better: string;
+  approx_cost_inr: number;
+}
+
 interface ProductAnalysis {
   extraction: {
     product_name?: string;
@@ -135,6 +151,7 @@ interface ProductAnalysis {
   ingredient_breakdown?: IngredientBreakdown;
   serving_reality?: ServingReality;
   natural_alternatives: NaturalAlternative[];
+  homemade_recipes?: HomemadeRecipe[];
   educational_notes: EducationalNote[];
 }
 
@@ -274,6 +291,44 @@ const DEMO_AUDIT: ProductAnalysis = {
       nutrient_amount: "Flavonoid antioxidants + only 4g sugar",
       approx_cost_inr: 25,
       note: "Low glycemic load compared to sweet biscuits; zero refined starches.",
+    },
+  ],
+  homemade_recipes: [
+    {
+      id: "atta_jaggery_pinni",
+      name: "Pan-Toasted Atta Jaggery Nankhatai",
+      category: "dessert_sweet",
+      dietary_type: "veg",
+      prep_time_minutes: 10,
+      target_craving: "Sweet biscuit or cookie craving",
+      hero_ingredients: ["Atta (Whole Wheat)", "Jaggery Powder (Gud)", "Desi Ghee", "Cardamom (Elaichi)"],
+      instructions: "Mix 4 tbsp atta with 1 tbsp melted ghee and 1.5 tbsp jaggery powder. Shape into small cookies and toast on low heat on a covered tawa for 4-5 mins per side.",
+      why_better: "Zero palm oil, 100% whole wheat with natural fiber, zero white refined sugar or artificial invert syrup.",
+      approx_cost_inr: 12,
+    },
+    {
+      id: "dark_choc_makhana",
+      name: "Cacao Roasted Makhana Crunch",
+      category: "dessert_sweet",
+      dietary_type: "veg",
+      prep_time_minutes: 5,
+      target_craving: "Chocolate bar or sweet crispy treat",
+      hero_ingredients: ["Phool Makhana", "Dark Chocolate (70%+)", "Ghee (1/2 tsp)"],
+      instructions: "Dry roast 1 cup makhana in 1/2 tsp ghee until crunchy. Melt 2 cubes dark chocolate with 1 tsp warm milk, toss makhana in glaze, cool for 2 mins.",
+      why_better: "Rich in magnesium and antioxidants; low glycemic load compared to ultra-processed cookies filled with hydrogenated fats.",
+      approx_cost_inr: 20,
+    },
+    {
+      id: "banana_egg_pancake",
+      name: "Quick Cinnamon Banana Pancake",
+      category: "dessert_sweet",
+      dietary_type: "egg",
+      prep_time_minutes: 6,
+      target_craving: "Bakery cake or sweet cookie craving",
+      hero_ingredients: ["1 Whole Egg", "1 Ripe Banana", "2 tbsp Atta", "Cinnamon"],
+      instructions: "Mash 1 ripe banana, whisk in 1 egg, 2 tbsp atta, pinch cinnamon. Pour onto a lightly greased pan and cook 2 mins per side until golden.",
+      why_better: "Natural sweetness from fruit, 7g bioavailable protein from real egg, zero high-fructose corn syrup.",
+      approx_cost_inr: 15,
     },
   ],
   educational_notes: [],
@@ -557,6 +612,121 @@ function IngredientDonutChart({ breakdown }: { breakdown?: IngredientBreakdown }
             <span>Total Sum: <strong>100%</strong></span>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function DietaryBadge({ type }: { type: "veg" | "egg" | "non_veg" }) {
+  if (type === "veg") {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-300 text-[11px] font-bold text-emerald-800">
+        <span className="w-2.5 h-2.5 border-2 border-emerald-600 flex items-center justify-center p-0.5 rounded-xs">
+          <span className="w-1.5 h-1.5 bg-emerald-600 rounded-full" />
+        </span>
+        Pure Veg
+      </span>
+    );
+  }
+  if (type === "egg") {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-amber-50 border border-amber-300 text-[11px] font-bold text-amber-900">
+        <span className="w-2.5 h-2.5 border-2 border-amber-600 flex items-center justify-center p-0.5 rounded-xs">
+          <span className="w-1.5 h-1.5 bg-amber-600 rounded-full" />
+        </span>
+        Contains Egg
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-red-50 border border-red-300 text-[11px] font-bold text-red-900">
+      <span className="w-2.5 h-2.5 border-2 border-red-600 flex items-center justify-center p-0.5 rounded-xs">
+        <span className="w-1.5 h-1.5 bg-red-600 rounded-full" />
+      </span>
+      Non-Veg
+    </span>
+  );
+}
+
+function HomemadeRecipesCard({ recipes }: { recipes?: HomemadeRecipe[] }) {
+  if (!recipes || recipes.length === 0) return null;
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+        <div>
+          <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+            <ChefHat className="w-5 h-5 text-amber-600" />
+            Quick Homemade Swaps (5–12 Min Indian Kitchen Recipes)
+          </h3>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Beat packaged ultra-processed cravings with zero palm oil, real ingredients, and kitchen staples.
+          </p>
+        </div>
+        <span className="text-xs text-amber-800 font-semibold bg-amber-100/70 border border-amber-200 px-2.5 py-1 rounded-full w-fit flex items-center gap-1">
+          🇮🇳 Indian Kitchen Swaps
+        </span>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {recipes.map((recipe) => (
+          <div
+            key={recipe.id}
+            className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-white hover:border-slate-300 hover:shadow-xs transition flex flex-col justify-between"
+          >
+            <div>
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <DietaryBadge type={recipe.dietary_type} />
+                <span className="text-[11px] font-semibold text-slate-500 flex items-center gap-1">
+                  <Clock className="w-3 h-3 text-slate-400" />
+                  {recipe.prep_time_minutes} mins
+                </span>
+              </div>
+
+              <h4 className="font-bold text-slate-900 text-sm mb-1 leading-snug">
+                {recipe.name}
+              </h4>
+
+              <p className="text-[11px] text-amber-900/80 font-medium bg-amber-50/60 rounded px-2 py-0.5 mb-2.5">
+                Replaces: {recipe.target_craving}
+              </p>
+
+              {recipe.hero_ingredients && recipe.hero_ingredients.length > 0 && (
+                <div className="mb-3">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                    Kitchen Ingredients
+                  </span>
+                  <div className="flex flex-wrap gap-1">
+                    {recipe.hero_ingredients.map((ing, i) => (
+                      <span
+                        key={i}
+                        className="text-[10px] bg-white border border-slate-200 text-slate-700 px-1.5 py-0.5 rounded font-medium"
+                      >
+                        {ing}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <p className="text-xs text-slate-700 leading-relaxed mb-3">
+                {recipe.instructions}
+              </p>
+            </div>
+
+            <div className="pt-2 border-t border-slate-200/60 mt-auto">
+              <div className="p-2 rounded-lg bg-emerald-50/80 border border-emerald-100 text-[11px] text-emerald-950 font-medium leading-relaxed">
+                <strong className="text-emerald-800">Why it beats packaged: </strong>
+                {recipe.why_better}
+              </div>
+              <div className="mt-2 text-right">
+                <span className="text-[11px] font-bold text-slate-700">
+                  Estimated Cost: ~₹{recipe.approx_cost_inr.toFixed(0)}
+                </span>
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -1106,6 +1276,11 @@ export default function Home() {
                 )}
               </div>
 
+              {/* Quick Homemade Kitchen Swaps */}
+              {analysis.homemade_recipes && analysis.homemade_recipes.length > 0 && (
+                <HomemadeRecipesCard recipes={analysis.homemade_recipes} />
+              )}
+
               {/* Educational Notes (Progressive Learning) */}
               {analysis.educational_notes && analysis.educational_notes.length > 0 && (
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
@@ -1247,7 +1422,7 @@ export default function Home() {
       <section className="mt-12 border-t border-slate-200 pt-6 text-center">
         <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Coming next</p>
         <p className="mt-2 text-sm text-slate-600">
-          Quick craving-aware recipes and category leaderboards to make healthier shelf choices easier.
+          Shelf product leaderboards and instant barcode lookups to make healthier grocery decisions easier.
         </p>
       </section>
     </main>

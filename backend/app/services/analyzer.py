@@ -47,6 +47,7 @@ from app.models.schemas import (
     ClaimVerification,
     EducationalNote,
     ExtractedIngredient,
+    HomemadeRecipe,
     IngredientBreakdown,
     IngredientFlag,
     IngredientShare,
@@ -119,6 +120,7 @@ def _load_json(filename: str) -> dict:
 # These are loaded ONCE when the module is first imported
 FLAGGED_ADDITIVES = _load_json("flagged_additives.json")
 NATURAL_ALTERNATIVES = _load_json("natural_alternatives.json")
+HOMEMADE_RECIPES = _load_json("homemade_recipes.json")
 
 # Daily recommended values (Indian RDA / WHO guidelines)
 # Used to calculate % of daily value
@@ -202,6 +204,8 @@ class Analyzer:
             "description": "Standard packaged food product"
         })
 
+        homemade_recipes = self._suggest_homemade_recipes(extraction, category)
+
         return ProductAnalysis(
             extraction=extraction,
             product_category=category,
@@ -211,6 +215,7 @@ class Analyzer:
             price_analysis=price,
             ingredient_breakdown=ingredient_breakdown,
             natural_alternatives=alternatives,
+            homemade_recipes=homemade_recipes,
             educational_notes=edu_notes,
             claim_verifications=claim_verifications,
             math_verification=math_verification,
@@ -631,6 +636,58 @@ class Analyzer:
             )
             for alt in self._select_alternatives(data_key, 3, extraction.product_name)
         ]
+
+    def _suggest_homemade_recipes(
+        self, extraction: LabelExtraction, category: ProductCategory
+    ) -> list[HomemadeRecipe]:
+        """
+        Suggests 2-3 quick Indian kitchen recipes matching the product's category and craving.
+        Each recipe explicitly specifies its Indian dietary classification:
+        - 'veg' (pure vegetarian, 🟢)
+        - 'egg' (contains egg / ovo-vegetarian, 🟡)
+        - 'non_veg' (contains meat/poultry/seafood, 🔴)
+        """
+        all_recipes = HOMEMADE_RECIPES.get("recipes", [])
+        cat_str = category.value if hasattr(category, "value") else str(category)
+
+        # Filter by product category
+        matching = [r for r in all_recipes if r.get("category") == cat_str]
+        if not matching:
+            matching = [r for r in all_recipes if r.get("category") in ("general_packaged", "savory_snack")]
+
+        product_name = (extraction.product_name or "").lower()
+
+        # Score matching based on product text relevance to the target craving
+        def score_recipe(r: dict) -> int:
+            score = 0
+            craving = r.get("target_craving", "").lower()
+            name = r.get("name", "").lower()
+            for word in product_name.split():
+                if len(word) > 2:
+                    if word in craving or word in name:
+                        score += 3
+            return score
+
+        sorted_recipes = sorted(matching, key=score_recipe, reverse=True)
+
+        selected: list[HomemadeRecipe] = []
+        for r in sorted_recipes[:3]:
+            selected.append(
+                HomemadeRecipe(
+                    id=r["id"],
+                    name=r["name"],
+                    category=category,
+                    dietary_type=r.get("dietary_type", "veg"),
+                    prep_time_minutes=r.get("prep_time_minutes", 10),
+                    target_craving=r.get("target_craving", ""),
+                    hero_ingredients=r.get("hero_ingredients", []),
+                    instructions=r.get("instructions", ""),
+                    why_better=r.get("why_better", ""),
+                    approx_cost_inr=float(r.get("approx_cost_inr", 15.0)),
+                )
+            )
+
+        return selected
 
     # ========================================================
     # Analysis Layer 5: Educational Notes
