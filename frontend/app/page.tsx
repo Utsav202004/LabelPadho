@@ -1229,9 +1229,39 @@ export default function Home() {
   const [nutritionFile, setNutritionFile] = useState<File | null>(null);
   const [ingredientsFile, setIngredientsFile] = useState<File | null>(null);
   const [frontFile, setFrontFile] = useState<File | null>(null);
+  const [nutritionPreview, setNutritionPreview] = useState<string | null>(null);
+  const [ingredientsPreview, setIngredientsPreview] = useState<string | null>(null);
+  const [frontPreview, setFrontPreview] = useState<string | null>(null);
   const [productName, setProductName] = useState("");
   const [price, setPrice] = useState("");
   const [expectedConsumption, setExpectedConsumption] = useState("");
+
+  const handleNutritionChange = (file: File | null) => {
+    setNutritionFile(file);
+    if (file) {
+      setNutritionPreview(URL.createObjectURL(file));
+    } else {
+      setNutritionPreview(null);
+    }
+  };
+
+  const handleIngredientsChange = (file: File | null) => {
+    setIngredientsFile(file);
+    if (file) {
+      setIngredientsPreview(URL.createObjectURL(file));
+    } else {
+      setIngredientsPreview(null);
+    }
+  };
+
+  const handleFrontChange = (file: File | null) => {
+    setFrontFile(file);
+    if (file) {
+      setFrontPreview(URL.createObjectURL(file));
+    } else {
+      setFrontPreview(null);
+    }
+  };
   
   // Loading & states
   const [loading, setLoading] = useState(false);
@@ -1422,48 +1452,120 @@ export default function Home() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {/* 1. Nutrition Table (Required) */}
                 <div className="border-2 border-dashed border-slate-300 rounded-xl p-4 text-center bg-white hover:border-emerald-400 hover:bg-emerald-50/30 transition">
-                  <Upload className="w-8 h-8 text-emerald-600 mx-auto mb-2" />
-                  <label className="block text-sm font-semibold text-slate-900 mb-1">
-                    1. Nutrition Table <span className="text-red-500">*</span>
-                  </label>
-                  <p className="text-xs text-slate-500 mb-3">Photo of nutrition facts / chart</p>
-                  <input
-                    type="file"
-                    accept="image/*,.heic,.heif"
-                    required
-                    onChange={(e) => setNutritionFile(e.target.files?.[0] || null)}
-                    className="text-xs text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-emerald-600 file:text-white hover:file:bg-emerald-700 cursor-pointer w-full"
-                  />
+                  {nutritionPreview ? (
+                    <div>
+                      <img
+                        src={nutritionPreview}
+                        alt="Nutrition table preview"
+                        className="w-full h-32 object-contain rounded-lg bg-slate-50 border border-slate-200 mb-2"
+                      />
+                      <div className="flex items-center justify-between px-1">
+                        <span className="text-[11px] font-semibold text-emerald-700 truncate max-w-[140px]">
+                          ✓ {nutritionFile?.name}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleNutritionChange(null)}
+                          className="text-[11px] text-red-600 font-semibold hover:underline cursor-pointer"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <Upload className="w-8 h-8 text-emerald-600 mx-auto mb-2" />
+                      <label className="block text-sm font-semibold text-slate-900 mb-1">
+                        1. Nutrition Table <span className="text-red-500">*</span>
+                      </label>
+                      <p className="text-xs text-slate-500 mb-3">Photo of nutrition facts / chart</p>
+                      <input
+                        type="file"
+                        accept="image/*,.heic,.heif"
+                        required
+                        onChange={(e) => handleNutritionChange(e.target.files?.[0] || null)}
+                        className="text-xs text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-emerald-600 file:text-white hover:file:bg-emerald-700 cursor-pointer w-full"
+                      />
+                    </>
+                  )}
                 </div>
 
                 {/* 2. Ingredients List (Optional) */}
                 <div className="border-2 border-dashed border-slate-300 rounded-xl p-4 text-center bg-white hover:border-emerald-400 hover:bg-emerald-50/30 transition">
-                  <Upload className="w-8 h-8 text-slate-500 mx-auto mb-2" />
-                  <label className="block text-sm font-semibold text-slate-900 mb-1">
-                    2. Ingredients Panel
-                  </label>
-                  <p className="text-xs text-slate-500 mb-3">Optional if on same photo</p>
-                  <input
-                    type="file"
-                    accept="image/*,.heic,.heif"
-                    onChange={(e) => setIngredientsFile(e.target.files?.[0] || null)}
-                    className="text-xs text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-slate-800 file:text-white hover:file:bg-slate-700 cursor-pointer w-full"
-                  />
+                  {ingredientsPreview ? (
+                    <div>
+                      <img
+                        src={ingredientsPreview}
+                        alt="Ingredients list preview"
+                        className="w-full h-32 object-contain rounded-lg bg-slate-50 border border-slate-200 mb-2"
+                      />
+                      <div className="flex items-center justify-between px-1">
+                        <span className="text-[11px] font-semibold text-slate-700 truncate max-w-[140px]">
+                          ✓ {ingredientsFile?.name}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleIngredientsChange(null)}
+                          className="text-[11px] text-red-600 font-semibold hover:underline cursor-pointer"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <Upload className="w-8 h-8 text-slate-500 mx-auto mb-2" />
+                      <label className="block text-sm font-semibold text-slate-900 mb-1">
+                        2. Ingredients Panel
+                      </label>
+                      <p className="text-xs text-slate-500 mb-3">Optional if on same photo</p>
+                      <input
+                        type="file"
+                        accept="image/*,.heic,.heif"
+                        onChange={(e) => handleIngredientsChange(e.target.files?.[0] || null)}
+                        className="text-xs text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-slate-800 file:text-white hover:file:bg-slate-700 cursor-pointer w-full"
+                      />
+                    </>
+                  )}
                 </div>
 
                 {/* 3. Front of Pack (Optional) */}
                 <div className="border-2 border-dashed border-slate-300 rounded-xl p-4 text-center bg-white hover:border-emerald-400 hover:bg-emerald-50/30 transition">
-                  <Upload className="w-8 h-8 text-slate-500 mx-auto mb-2" />
-                  <label className="block text-sm font-semibold text-slate-900 mb-1">
-                    3. Front of Pack
-                  </label>
-                  <p className="text-xs text-slate-500 mb-3">Verifies 'Multigrain' / 'High Protein'</p>
-                  <input
-                    type="file"
-                    accept="image/*,.heic,.heif"
-                    onChange={(e) => setFrontFile(e.target.files?.[0] || null)}
-                    className="text-xs text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-amber-600 file:text-white hover:file:bg-amber-700 cursor-pointer w-full"
-                  />
+                  {frontPreview ? (
+                    <div>
+                      <img
+                        src={frontPreview}
+                        alt="Front packaging preview"
+                        className="w-full h-32 object-contain rounded-lg bg-slate-50 border border-slate-200 mb-2"
+                      />
+                      <div className="flex items-center justify-between px-1">
+                        <span className="text-[11px] font-semibold text-amber-800 truncate max-w-[140px]">
+                          ✓ {frontFile?.name}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleFrontChange(null)}
+                          className="text-[11px] text-red-600 font-semibold hover:underline cursor-pointer"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <Upload className="w-8 h-8 text-slate-500 mx-auto mb-2" />
+                      <label className="block text-sm font-semibold text-slate-900 mb-1">
+                        3. Front of Pack
+                      </label>
+                      <p className="text-xs text-slate-500 mb-3">Verifies 'Multigrain' / 'High Protein'</p>
+                      <input
+                        type="file"
+                        accept="image/*,.heic,.heif"
+                        onChange={(e) => handleFrontChange(e.target.files?.[0] || null)}
+                        className="text-xs text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-amber-600 file:text-white hover:file:bg-amber-700 cursor-pointer w-full"
+                      />
+                    </>
+                  )}
                 </div>
               </div>
 
