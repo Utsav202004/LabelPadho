@@ -2,7 +2,7 @@
 History and scan persistence API endpoints.
 
 Provides:
-- GET /api/history: List recent scans with filtering
+- GET /api/history: List recent scans with filtering (?q= searches name/brand)
 - GET /api/history/{id}: Fetch full analysis details of a specific past scan
 - DELETE /api/history/{id}: Remove a scan from history
 """
@@ -15,6 +15,7 @@ from sqlmodel import Session, select
 from app.core.db import get_session
 from app.models.db_models import ProductScan, ProductScanRead
 from app.models.schemas import ProductAnalysis
+from app.api.routes.products import apply_search_filter
 
 router = APIRouter()
 
@@ -24,12 +25,15 @@ async def list_history(
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     user_id: Optional[str] = Query(None, description="Optional user filter"),
+    q: Optional[str] = Query(None, max_length=100, description="Filter by product name or brand"),
     session: Session = Depends(get_session),
 ):
     """List past product scans ordered by latest first."""
     query = select(ProductScan).order_by(ProductScan.created_at.desc())
     if user_id:
         query = query.where(ProductScan.user_id == user_id)
+    if q:
+        query = apply_search_filter(query, q)
 
     query = query.offset(offset).limit(limit)
     scans = session.exec(query).all()

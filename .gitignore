@@ -42,3 +42,7 @@ htmlcov/
 
 # ---------- Uploads (local dev) ----------
 uploads/
+
+# Local SQLite scan history & TS build cache
+*.db
+*.tsbuildinfo

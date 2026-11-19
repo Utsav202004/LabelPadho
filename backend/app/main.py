@@ -34,7 +34,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import analyze, health, history
+from app.api.routes import analyze, health, history, products
 from app.core.db import init_db
 
 # Configure logging so we can see what's happening
@@ -106,6 +106,7 @@ app.add_middleware(
 app.include_router(health.router, prefix="/api", tags=["health"])
 app.include_router(analyze.router, prefix="/api", tags=["analysis"])
 app.include_router(history.router, prefix="/api", tags=["history"])
+app.include_router(products.router, prefix="/api", tags=["products"])
 
 
 @app.get("/")

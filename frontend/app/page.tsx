@@ -19,7 +19,9 @@ import {
   PieChart,
   ChefHat,
   Clock,
-  Utensils
+  Utensils,
+  Search,
+  X
 } from "lucide-react";
 
 interface NutritionInfo {
@@ -1289,10 +1291,11 @@ export default function Home() {
   const [historyLoading, setHistoryLoading] = useState(false);
 
   // Fetch history when tab switches
-  const loadHistory = async () => {
+  const loadHistory = async (q: string = "") => {
     setHistoryLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/history`);
+      const params = q.trim() ? `?q=${encodeURIComponent(q.trim())}` : "";
+      const res = await fetch(`${API_BASE}/api/history${params}`);
       if (res.ok) {
         const data = await res.json();
         setHistoryList(data);
@@ -1306,9 +1309,54 @@ export default function Home() {
 
   useEffect(() => {
     if (activeTab === "history") {
-      loadHistory();
+      loadHistory(historyQuery);
     }
   }, [activeTab]);
+
+  // Product search (scanner tab) — find an already-audited product instead of re-uploading photos
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<HistoryCard[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchDone, setSearchDone] = useState(false);
+
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (!q) {
+      setSearchResults([]);
+      setSearchDone(false);
+      setSearchLoading(false);
+      return;
+    }
+    const controller = new AbortController();
+    setSearchLoading(true);
+    // Debounce so we only hit the API once the user pauses typing
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `${API_BASE}/api/products/search?q=${encodeURIComponent(q)}`,
+          { signal: controller.signal }
+        );
+        if (res.ok) setSearchResults(await res.json());
+        setSearchDone(true);
+      } catch (e: any) {
+        if (e?.name !== "AbortError") console.error("Product search failed", e);
+      } finally {
+        if (!controller.signal.aborted) setSearchLoading(false);
+      }
+    }, 300);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [searchQuery]);
+
+  // History tab filter (server-side, so it covers more than the 20 latest scans)
+  const [historyQuery, setHistoryQuery] = useState("");
+  useEffect(() => {
+    if (activeTab !== "history") return;
+    const timer = setTimeout(() => loadHistory(historyQuery), 300);
+    return () => clearTimeout(timer);
+  }, [historyQuery]);
 
   const loadDemoAudit = (demo: ProductAnalysis) => {
     setError(null);
@@ -1446,6 +1494,80 @@ export default function Home() {
       {/* SCANNER VIEW */}
       {activeTab === "scan" && (
         <>
+          {/* Product Search — skip the photo upload if this product was audited before */}
+          <section className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-6 mb-6">
+            <label htmlFor="product-search" className="block text-sm font-semibold text-slate-900">
+              Already audited? Search instead of uploading
+            </label>
+            <p className="text-xs text-slate-500 mt-0.5 mb-3">
+              Every scanned product is saved. Find it by name or brand to open its audit instantly.
+            </p>
+            <div className="relative">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                id="product-search"
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="e.g. Maggi, Amul whey, Britannia..."
+                autoComplete="off"
+                className="w-full pl-9 pr-9 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-400"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-700 cursor-pointer"
+                  aria-label="Clear search"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+
+            {searchQuery.trim() && (
+              <div className="mt-3">
+                {searchLoading && searchResults.length === 0 ? (
+                  <p className="text-xs text-slate-500 py-2">Searching saved products...</p>
+                ) : searchResults.length > 0 ? (
+                  <ul className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden">
+                    {searchResults.map((item) => (
+                      <li key={item.id}>
+                        <button
+                          type="button"
+                          onClick={() => viewPastScan(item.id)}
+                          className="w-full text-left px-4 py-3 hover:bg-emerald-50/60 transition flex items-center justify-between gap-3 cursor-pointer"
+                        >
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-slate-900 truncate">
+                              {item.product_name}
+                              {item.brand && (
+                                <span className="font-normal text-slate-500"> · {item.brand}</span>
+                              )}
+                            </p>
+                            <p className="text-xs text-slate-500 truncate">{item.one_line_summary}</p>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {item.health_score != null && (
+                              <span className="text-xs font-extrabold px-2 py-0.5 rounded-md bg-slate-100 text-slate-800">
+                                {item.health_score}/10
+                              </span>
+                            )}
+                            <ArrowRight className="w-4 h-4 text-emerald-600" />
+                          </div>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : searchDone ? (
+                  <p className="text-xs text-slate-500 py-2">
+                    No saved audit for &ldquo;{searchQuery.trim()}&rdquo; yet. Upload its label below and it will be searchable next time.
+                  </p>
+                ) : null}
+              </div>
+            )}
+          </section>
+
           {/* Upload Form */}
           <section className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 sm:p-8 mb-10">
             <form onSubmit={handleSubmit} className="space-y-6">
@@ -1904,17 +2026,33 @@ export default function Home() {
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold text-slate-900">Past Audits & Scans</h2>
             <button
-              onClick={loadHistory}
+              onClick={() => loadHistory(historyQuery)}
               className="text-xs font-semibold text-slate-600 hover:text-slate-900 cursor-pointer"
             >
               Refresh
             </button>
           </div>
 
+          <div className="relative">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="search"
+              value={historyQuery}
+              onChange={(e) => setHistoryQuery(e.target.value)}
+              placeholder="Filter past scans by product or brand..."
+              aria-label="Filter past scans"
+              className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-400"
+            />
+          </div>
+
           {historyLoading ? (
             <div className="py-12 text-center text-slate-500 text-sm">
               <div className="w-6 h-6 border-2 border-slate-900 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
               Loading history...
+            </div>
+          ) : historyList.length === 0 && historyQuery.trim() ? (
+            <div className="py-12 text-center bg-white border border-slate-200 rounded-2xl p-6">
+              <p className="text-slate-600 text-sm">No past scans match &ldquo;{historyQuery.trim()}&rdquo;.</p>
             </div>
           ) : historyList.length === 0 ? (
             <div className="py-12 text-center bg-white border border-slate-200 rounded-2xl p-6">
