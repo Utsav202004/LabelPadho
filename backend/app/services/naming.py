@@ -95,3 +95,36 @@ def clean_brand(brand: str | None) -> str | None:
         return None
     words = [w for w in brand.replace(".", " ").split() if w.lower().strip(",") not in _LEGAL_WORDS]
     return " ".join(words).strip(" ,-") or brand.strip()
+
+
+# Emojis (and the invisible variation selector that follows some of them)
+_EMOJI = re.compile("[\U0001F300-\U0001FAFF\u2600-\u27BF\u2B50\u2B55\u2705\u274C\uFE0F]")
+# Old generated phrasings, kept in reports saved before the wording changed
+_OLD_PHRASES = [
+    ("Nutrition Table Verified:", "Nutrition table checks out:"),
+    ("Calorie Under-reporting:", "Calorie under-reporting:"),
+    ("Calorie Over-reporting:", "Calorie over-reporting:"),
+    ("the #1 primary ingredient by weight", "the first (largest) ingredient by weight"),
+    ("(the #1 ingredient is present in the largest quantity)", "(the first ingredient is present in the largest quantity)"),
+]
+
+
+def clean_display_text(text: str) -> str:
+    """Remove emojis and outdated phrasings from generated report text."""
+    for old, new in _OLD_PHRASES:
+        text = text.replace(old, new)
+    cleaned = _EMOJI.sub("", text)
+    if cleaned != text:
+        cleaned = re.sub(r"[ \t]{2,}", " ", cleaned).strip()
+    return cleaned
+
+
+def clean_report_data(value):
+    """Apply clean_display_text to every string inside a saved report (dicts/lists, recursively)."""
+    if isinstance(value, str):
+        return clean_display_text(value)
+    if isinstance(value, list):
+        return [clean_report_data(v) for v in value]
+    if isinstance(value, dict):
+        return {k: clean_report_data(v) for k, v in value.items()}
+    return value

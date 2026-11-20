@@ -9,7 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import inspect, text
 from sqlalchemy.pool import StaticPool
-from sqlmodel import Session, SQLModel, create_engine
+from sqlmodel import Session, SQLModel, create_engine, select
 
 os.environ.setdefault("GEMINI_API_KEY", "test-key-not-used")
 
@@ -380,3 +380,39 @@ def test_off_names_are_cleaned_of_pack_sizes_and_barcodes():
     assert clean_off_name("8906002006601") is None
     assert clean_off_name("7Up Super Duper") == "7Up Super Duper"
     assert clean_off_name("99% Cacao Dark Chocolate") == "99% Cacao Dark Chocolate"
+
+
+def test_saved_reports_are_cleaned_of_emojis_and_unnamed_seeds(monkeypatch):
+    import json as _json
+
+    from app.services.naming import clean_display_text
+
+    assert clean_display_text("✅ Nutrition Table Verified: Printed calories match") == "Nutrition table checks out: Printed calories match"
+    assert clean_display_text("Watch out ⚠️ high sodium") == "Watch out high sodium"
+
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    SQLModel.metadata.create_all(engine)
+    monkeypatch.setattr(db_module, "engine", engine)
+    old = {"extraction": {"product_name": "Parle-G 250 g"},
+           "math_verification": {"details": "✅ Nutrition Table Verified: ok"},
+           "claim_verifications": [{"explanation": "⚡ Moderate concern: x"}]}
+    with Session(engine) as s:
+        s.add_all([
+            ProductScan(product_name="Parle-G 250 g", source="open_food_facts", full_analysis_json=_json.dumps(old)),
+            ProductScan(product_name="8901058000252", source="open_food_facts", full_analysis_json="{}"),
+            ProductScan(product_name="Bourbon", source="label_scan", full_analysis_json=_json.dumps(old)),
+        ])
+        s.commit()
+
+    db_module.clean_saved_reports()
+    db_module.clean_saved_reports()  # idempotent
+
+    with Session(engine) as s:
+        rows = {r.product_name: r for r in s.exec(select(ProductScan)).all()}
+    assert set(rows) == {"Parle-G", "Bourbon"}  # barcode-only seed removed, pack size stripped
+    text = rows["Parle-G"].full_analysis_json
+    assert "✅" not in text and "⚡" not in text and "Nutrition table checks out" in text
+    assert _json.loads(text)["extraction"]["product_name"] == "Parle-G"
+    # label scans keep the catalog name (the source of truth after any rename)
+    assert _json.loads(rows["Bourbon"].full_analysis_json)["extraction"]["product_name"] == "Bourbon"
+    assert "✅" not in rows["Bourbon"].full_analysis_json

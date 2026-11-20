@@ -89,6 +89,7 @@ def init_db():
     SQLModel.metadata.create_all(engine)
     add_missing_columns()
     standardize_existing_names()
+    clean_saved_reports()
 
 
 def add_missing_columns():
@@ -141,6 +142,58 @@ def standardize_existing_names():
         if changed:
             session.commit()
             logger.info("Standardised names on %d existing scan(s)", changed)
+
+
+def clean_saved_reports():
+    """
+    Reports are generated once and saved, so wording changes don't reach old
+    ones. Bring saved reports up to date (idempotent; only touches rows that change):
+    - strip emojis / outdated phrasings from the report text and cached translations
+    - re-clean Open Food Facts names; drop seeded rows whose "name" was just a barcode
+    """
+    from app.models.db_models import DataReport, ProductScan
+    from app.services.naming import clean_display_text, clean_report_data
+    from app.services.open_food_facts import clean_off_name
+
+    with Session(engine) as session:
+        changed = removed = 0
+        for scan in session.exec(select(ProductScan)).all():
+            if scan.source == "open_food_facts":
+                name = clean_off_name(scan.product_name or "")
+                if name is None:
+                    for report in session.exec(select(DataReport).where(DataReport.scan_id == scan.id)).all():
+                        session.delete(report)
+                    session.delete(scan)
+                    removed += 1
+                    continue
+            else:
+                name = scan.product_name
+
+            dirty = False
+            for field in ("full_analysis_json", "translations_json"):
+                raw = getattr(scan, field)
+                if not raw:
+                    continue
+                try:
+                    data = json.loads(raw)
+                except json.JSONDecodeError:
+                    continue
+                cleaned = clean_report_data(data)
+                if field == "full_analysis_json" and isinstance(cleaned.get("extraction"), dict):
+                    cleaned["extraction"]["product_name"] = name
+                if cleaned != data:
+                    setattr(scan, field, json.dumps(cleaned, ensure_ascii=False))
+                    dirty = True
+            summary = clean_display_text(scan.one_line_summary or "")
+            if name != scan.product_name or summary != scan.one_line_summary:
+                scan.product_name, scan.one_line_summary = name, summary
+                dirty = True
+            if dirty:
+                session.add(scan)
+                changed += 1
+        if changed or removed:
+            session.commit()
+            logger.info("Cleaned %d saved report(s); removed %d unnamed seeded product(s)", changed, removed)
 
 
 def get_session():
