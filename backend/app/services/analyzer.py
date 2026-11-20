@@ -41,6 +41,7 @@ NEW CONCEPTS:
 
 import json
 import logging
+import re
 from pathlib import Path
 
 from app.models.schemas import (
@@ -138,6 +139,109 @@ DAILY_LIMITS = {
 }
 
 
+# Nutrient fields that scale linearly with the amount eaten
+NUTRIENT_FIELDS = [
+    "energy_kcal", "protein_g", "total_fat_g", "saturated_fat_g",
+    "trans_fat_g", "carbohydrates_g", "sugar_g", "added_sugar_g",
+    "fiber_g", "sodium_mg",
+]
+_GRAM_FIELDS = [
+    "protein_g", "total_fat_g", "saturated_fat_g", "carbohydrates_g",
+    "sugar_g", "added_sugar_g", "fiber_g",
+]
+
+
+def _is_physically_impossible(nutrition: NutritionInfo, grams: float) -> bool:
+    """
+    True when the nutrient values cannot fit inside `grams` of food.
+
+    E.g. 36g sugar "per 16.7g serving" is impossible: the values must really be
+    from the per-100g column. Small tolerance for label rounding.
+    """
+    limit = grams * 1.05 + 0.5
+    macros = [
+        v for f in ("protein_g", "total_fat_g", "carbohydrates_g")
+        if (v := getattr(nutrition, f)) is not None
+    ]
+    if sum(macros) > limit:
+        return True
+    if any((v := getattr(nutrition, f)) is not None and v > limit for f in _GRAM_FIELDS):
+        return True
+    # Pure fat is ~9 kcal/g, so nothing can exceed that energy density
+    if nutrition.energy_kcal is not None and nutrition.energy_kcal > grams * 9 * 1.05 + 5:
+        return True
+    return False
+
+
+def _has_nutrients(nutrition: NutritionInfo | None) -> bool:
+    return bool(nutrition) and any(getattr(nutrition, f) is not None for f in NUTRIENT_FIELDS)
+
+
+def _scale_from_100g(per_100g: NutritionInfo, serving: NutritionInfo, serving_g: float) -> NutritionInfo:
+    """Per-serving values derived from per-100g values, keeping the serving metadata."""
+    factor = serving_g / 100
+    return serving.model_copy(update={
+        f: round(v * factor, 1) if (v := getattr(per_100g, f)) is not None else None
+        for f in NUTRIENT_FIELDS
+    })
+
+
+def sanitize_extraction(extraction: LabelExtraction) -> LabelExtraction:
+    """
+    Repair common, detectable extraction mistakes before any analysis runs.
+
+    1. Per-100g values filed as per-serving (Indian labels print both columns
+       side by side and the vision model sometimes reads the wrong one). We
+       detect it because the nutrients physically cannot fit in the serving,
+       then rebuild per-serving values from the per-100g figures.
+    2. Per-serving nutrients missing but a per-100g column and serving size
+       are present → derive per-serving values.
+    3. Net weight missing but servings x serving size known → derive it.
+
+    Idempotent: running it on an already-clean extraction changes nothing.
+    """
+    serving = extraction.nutrition_per_serving
+    serving_g = serving.serving_size_g
+    per_100g = extraction.nutrition_per_100g
+    update: dict = {}
+
+    if serving_g and serving_g > 0:
+        per_100g_ok = _has_nutrients(per_100g) and not _is_physically_impossible(per_100g, 100)
+
+        if _has_nutrients(serving) and _is_physically_impossible(serving, serving_g):
+            if per_100g_ok:
+                source = per_100g
+            elif not _is_physically_impossible(serving, 100):
+                # The "per serving" numbers are the per-100g column
+                source = serving
+                if not _has_nutrients(per_100g):
+                    update["nutrition_per_100g"] = NutritionInfo(
+                        serving_size_g=100,
+                        **{f: getattr(serving, f) for f in NUTRIENT_FIELDS},
+                    )
+            else:
+                source = None
+                logger.warning(
+                    "Per-serving nutrition for %s is impossible for a %sg serving and could not be repaired",
+                    extraction.product_name, serving_g,
+                )
+            if source is not None:
+                logger.warning(
+                    "Per-serving nutrition for %s looked like per-100g values; rescaled to %sg serving",
+                    extraction.product_name, serving_g,
+                )
+                update["nutrition_per_serving"] = _scale_from_100g(source, serving, serving_g)
+
+        elif not _has_nutrients(serving) and per_100g_ok:
+            update["nutrition_per_serving"] = _scale_from_100g(per_100g, serving, serving_g)
+
+        servings = serving.servings_per_package
+        if not extraction.net_weight_g and servings and servings > 0:
+            update["net_weight_g"] = round(servings * serving_g, 1)
+
+    return extraction.model_copy(update=update) if update else extraction
+
+
 class Analyzer:
     """
     Takes raw label extraction and produces a full analysis.
@@ -178,6 +282,8 @@ class Analyzer:
         """
         if learned_topics is None:
             learned_topics = set()
+
+        extraction = sanitize_extraction(extraction)
 
         # Run each analysis layer independently
         flags = self._flag_ingredients(extraction)
@@ -346,16 +452,11 @@ class Analyzer:
             return None
 
         def scaled_nutrition(amount_g: float, multiplier: float) -> NutritionInfo:
-            fields = [
-                "energy_kcal", "protein_g", "total_fat_g", "saturated_fat_g",
-                "trans_fat_g", "carbohydrates_g", "sugar_g", "added_sugar_g",
-                "fiber_g", "sodium_mg",
-            ]
             scaled = {
                 field: round(value * multiplier, 1)
                 if (value := getattr(nutrition, field)) is not None
                 else None
-                for field in fields
+                for field in NUTRIENT_FIELDS
             }
             return NutritionInfo(serving_size_g=amount_g, servings_per_package=1, **scaled)
 
@@ -392,16 +493,23 @@ class Analyzer:
                 + ", ".join(details) + "."
             )
         if servings and servings > 1.5:
-            serving_description = nutrition.serving_unit_description
+            serving_description = (nutrition.serving_unit_description or "").strip()
+            # Skip descriptions that only repeat the weight, e.g. "16.7 g"
+            if re.fullmatch(r"[\d.,\s]*(g|gm|gms|grams?)?", serving_description, re.IGNORECASE):
+                serving_description = ""
             serving_label = (
-                f"{serving_g}g ({serving_description})"
+                f"{serving_g:g}g ({serving_description})"
                 if serving_description
-                else f"{serving_g}g"
+                else f"{serving_g:g}g"
+            )
+            packet = (
+                f"the full packet is {package_g:g}g ({servings:g} servings)"
+                if package_g
+                else f"the packet holds {servings:g} servings"
             )
             package_note = (
                 f"The label shows nutrition for a {serving_label} serving, "
-                f"but the full packet is {package_g}g "
-                f"({servings:.0f} servings). "
+                f"but {packet}. "
                 f"Most people eat more than one serving in a sitting."
             )
             if serving_g <= 10 and servings >= 4:

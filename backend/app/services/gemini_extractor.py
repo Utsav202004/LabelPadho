@@ -112,7 +112,11 @@ IMPORTANT GUIDELINES:
 1. Extract values EXACTLY as printed. Do not round, estimate, or calculate.
 2. Ingredients must be listed in the ORDER they appear on the label (first = highest quantity).
 3. If a value is not visible, not legible, or not present, use null.
-4. Indian labels often show nutrition per serving AND per 100g — extract both if available.
+4. Indian labels often show nutrition per serving AND per 100g in side-by-side columns — extract both if available.
+   Read the column headers carefully: `nutrition_per_serving` must come ONLY from the per-serving column
+   and `nutrition_per_100g` ONLY from the per-100g column. Never copy per-100g numbers into
+   `nutrition_per_serving`. If the label has no per-serving column, leave its nutrient values null
+   (still fill `serving_size_g` if a serving size is printed).
 5. The label may be in English, Hindi, or mixed — extract everything regardless of language.
 6. Look for ALL marketing claims on the front, back, and sides of the package.
    Examples: "No Palm Oil", "Zero Palm Oil", "Source of Protein", "Source of Fibre", "Good Source of Fiber",

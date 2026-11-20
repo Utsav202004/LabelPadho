@@ -44,7 +44,7 @@ from sqlmodel import Session
 from app.core.db import get_session
 from app.models.db_models import ProductScan
 from app.models.schemas import AnalyzeResponse, ProductAnalysis
-from app.services.analyzer import Analyzer
+from app.services.analyzer import Analyzer, sanitize_extraction
 from app.services.gemini_extractor import GeminiExtractor
 
 logger = logging.getLogger(__name__)
@@ -156,6 +156,9 @@ async def analyze_label(
         # If user typed a manual product name and extraction didn't find one, apply it
         if product_name and not extraction.product_name:
             extraction.product_name = product_name.strip()
+        # Repair per-100g values misread as per-serving etc., so the saved
+        # record and the analysis both use corrected numbers
+        extraction = sanitize_extraction(extraction)
     except Exception as e:
         logger.error(f"Gemini extraction failed: {e}")
         raise HTTPException(

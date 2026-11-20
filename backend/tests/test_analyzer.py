@@ -693,3 +693,79 @@ def test_undeclared_ingredients_grouped_into_bracket_without_hallucinating_perce
 
 
 
+
+
+# --- Per-100g values misread as per-serving (Oreo regression) ---------------
+
+def _oreo_per_100g_as_serving(**extra) -> LabelExtraction:
+    """Gemini put Oreo's per-100g column into nutrition_per_serving for a 16.7g serving."""
+    return LabelExtraction(
+        product_name="Oreo Chocolate Creme Biscuits",
+        nutrition_per_serving=NutritionInfo(
+            serving_size_g=16.7,
+            serving_unit_description="16.7 g",
+            servings_per_package=2,
+            energy_kcal=480.0,
+            protein_g=5.0,
+            total_fat_g=20.0,
+            carbohydrates_g=70.0,
+            sugar_g=37.0,
+            added_sugar_g=36.0,
+            sodium_mg=420.0,
+        ),
+        **extra,
+    )
+
+
+def test_per_100g_values_filed_as_per_serving_are_rescaled(analyzer):
+    analysis = analyzer.analyze(_oreo_per_100g_as_serving(), expected_consumption_g=35)
+    reality = analysis.serving_reality
+
+    portion = reality.nutrition_for_expected_consumption
+    # 36g added sugar per 100g -> 12.6g in 35g, never more sugar than food
+    assert portion.added_sugar_g == pytest.approx(12.6, abs=0.2)
+    assert portion.added_sugar_g < 35
+    assert portion.sodium_mg == pytest.approx(147, abs=2)
+    # Packet weight derived from 2 x 16.7g; no "None" in the text
+    assert reality.package_weight_g == pytest.approx(33.4)
+    assert "None" not in reality.realistic_consumption
+    assert "16.7g (16.7 g)" not in reality.realistic_consumption
+
+
+def test_per_100g_column_is_preferred_when_present():
+    from app.services.analyzer import sanitize_extraction
+
+    extraction = _oreo_per_100g_as_serving(
+        nutrition_per_100g=NutritionInfo(
+            serving_size_g=100, energy_kcal=480, protein_g=5, total_fat_g=20,
+            carbohydrates_g=70, sugar_g=37, added_sugar_g=36, sodium_mg=420,
+        )
+    )
+    fixed = sanitize_extraction(extraction).nutrition_per_serving
+    assert fixed.sugar_g == pytest.approx(6.2, abs=0.1)
+    assert fixed.serving_size_g == 16.7
+    assert fixed.servings_per_package == 2
+
+
+def test_plausible_per_serving_values_are_untouched():
+    from app.services.analyzer import sanitize_extraction
+
+    extraction = LabelExtraction(
+        net_weight_g=150,
+        nutrition_per_serving=NutritionInfo(
+            serving_size_g=30, energy_kcal=140, protein_g=5, total_fat_g=7,
+            carbohydrates_g=15, sugar_g=2, sodium_mg=300,
+        ),
+    )
+    assert sanitize_extraction(extraction) is extraction
+
+
+def test_per_serving_derived_from_per_100g_when_missing():
+    from app.services.analyzer import sanitize_extraction
+
+    extraction = LabelExtraction(
+        nutrition_per_serving=NutritionInfo(serving_size_g=25),
+        nutrition_per_100g=NutritionInfo(serving_size_g=100, protein_g=8, sugar_g=20, sodium_mg=400),
+    )
+    fixed = sanitize_extraction(extraction).nutrition_per_serving
+    assert (fixed.protein_g, fixed.sugar_g, fixed.sodium_mg) == (2.0, 5.0, 100.0)
