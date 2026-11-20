@@ -369,3 +369,14 @@ def test_seed_duplicate_detection_and_brand_cleanup():
     assert is_duplicate(product_identity("Maggi", "Maggie Masala Noodles"), seen)
     assert not is_duplicate(product_identity("Britannia", "Good Day Cashew Cookies"), seen)
     assert not is_duplicate(product_identity("Haldiram's", "Aloo Bhujia"), seen)
+
+
+def test_off_names_are_cleaned_of_pack_sizes_and_barcodes():
+    from app.services.open_food_facts import clean_off_name
+
+    assert clean_off_name("Haldiram Bhujia400g") == "Haldiram Bhujia"
+    assert clean_off_name("Jim Jam92 G") == "Jim Jam"
+    assert clean_off_name("Real Fruit Power Mixed Fruit 1Ktr Tpk") == "Real Fruit Power Mixed Fruit"
+    assert clean_off_name("8906002006601") is None
+    assert clean_off_name("7Up Super Duper") == "7Up Super Duper"
+    assert clean_off_name("99% Cacao Dark Chocolate") == "99% Cacao Dark Chocolate"

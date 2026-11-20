@@ -25,10 +25,11 @@ from app.services.seed import seed_from_open_food_facts  # noqa: E402
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--target", type=int, default=100)
+    parser.add_argument("--start-page", type=int, default=1, help="skip listings already processed")
     args = parser.parse_args()
     init_db()
     with Session(engine) as session:
-        result = asyncio.run(seed_from_open_food_facts(session, target=args.target))
+        result = asyncio.run(seed_from_open_food_facts(session, target=args.target, start_page=args.start_page))
     print(json.dumps(result, indent=2, ensure_ascii=False))
 
 

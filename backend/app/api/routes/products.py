@@ -274,11 +274,15 @@ async def lookup_barcode(
 @router.post("/admin/seed-open-food-facts")
 async def seed_catalog(
     target: int = Query(100, ge=1, le=300),
+    start_page: int = Query(1, ge=1, le=100),
     session: Session = Depends(get_session),
     _admin: None = Depends(require_admin),
 ):
-    """Admin: add popular Indian products from Open Food Facts (skips ones already in the catalog)."""
+    """
+    Admin: add popular Indian products from Open Food Facts (skips ones already in the catalog).
+    If Open Food Facts is busy the run stops early and says which start_page to continue from.
+    """
     try:
-        return await seed_from_open_food_facts(session, target=target)
+        return await seed_from_open_food_facts(session, target=target, start_page=start_page)
     except httpx.HTTPError as e:
         raise HTTPException(status_code=502, detail=f"Open Food Facts unavailable: {e}")

@@ -56,17 +56,17 @@ async def lifespan(app: FastAPI):
     The code AFTER `yield` runs at shutdown.
     """
     # --- Startup ---
-    logger.info("🚀 LabelPadho API starting up...")
+    logger.info("LabelPadho API starting up...")
     init_db()
     logger.info(
-        "✅ Database initialized (%s)",
+        "Database initialized (%s)",
         "local SQLite" if IS_SQLITE else "hosted Postgres via DATABASE_URL",
     )
-    logger.info("✅ Flagged additives database loaded")
-    logger.info("✅ Natural alternatives database loaded")
+    logger.info("Flagged additives database loaded")
+    logger.info("Natural alternatives database loaded")
     yield
     # --- Shutdown ---
-    logger.info("👋 LabelPadho API shutting down...")
+    logger.info("LabelPadho API shutting down...")
 
 
 # Create the FastAPI app instance
@@ -117,7 +117,7 @@ app.include_router(translate.router, prefix="/api", tags=["translation"])
 async def root():
     """Root endpoint — redirects to API docs."""
     return {
-        "message": "Welcome to LabelPadho API 🔍",
+        "message": "Welcome to LabelPadho API",
         "docs": "/docs",
         "health": "/api/health",
     }

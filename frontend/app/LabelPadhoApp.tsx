@@ -20,7 +20,6 @@ import {
   Search,
   X,
   Pencil,
-  Trophy,
   UserRound,
   MessageCircle,
   Share2,
@@ -317,7 +316,7 @@ const DEMO_AUDIT: ProductAnalysis = {
     {
       claim: "Multigrain",
       status: "misleading",
-      explanation: "Packaged as 'Multigrain', but the #1 primary ingredient by weight is Refined Wheat Flour (Maida) at 54%. Grains other than wheat make up only 4% (oats).",
+      explanation: "Packaged as 'Multigrain', but the first (largest) ingredient by weight is Refined Wheat Flour (Maida) at 54%. Grains other than wheat make up only 4% (oats).",
       fssai_rule: "FSSAI Food Safety and Standards (Advertising and Claims) Regulations",
     },
     {
@@ -602,7 +601,7 @@ const DEMO_AUDITS: { label: string; analysis: ProductAnalysis }[] = [
         hero_percentage: 0.0,
         filler_percentage: 10.5,
         coverage_percentage: 99.5,
-        fssai_disclosure: "Under FSSAI Regulations, carbonated beverages list ingredients in strict descending order of weight. Water forms the bulk (#1), followed by sugar (#2), and micro-additives (INS 338, 150d) at <1%.",
+        fssai_disclosure: "Under FSSAI Regulations, carbonated beverages list ingredients in strict descending order of weight. Water forms the bulk (listed first), followed by sugar (#2), and micro-additives (INS 338, 150d) at <1%.",
         descending_ingredients: [
           "Carbonated Water",
           "Sugar",
@@ -806,7 +805,7 @@ const DEMO_AUDITS: { label: string; analysis: ProductAnalysis }[] = [
         hero_percentage: 12.0,
         filler_percentage: 13.5,
         coverage_percentage: 25.5,
-        fssai_disclosure: "Under FSSAI Regulations, Mango Pulp (12%) is declared under statutory QUID rules. Sugar (13.5%) is derived from the nutrition table. Water (#1 by weight) and micro-stabilizers make up the rest.",
+        fssai_disclosure: "Under FSSAI Regulations, Mango Pulp (12%) is declared under statutory QUID rules. Sugar (13.5%) is derived from the nutrition table. (listed first, largest by weight) and micro-stabilizers make up the rest.",
         descending_ingredients: [
           "Water",
           "Mango Pulp (12%)",
@@ -894,7 +893,7 @@ const DEMO_AUDITS: { label: string; analysis: ProductAnalysis }[] = [
       one_line_summary: "Over 25% of this ketchup is pure refined sugar, with 140mg sodium in just one tablespoon.",
       detailed_summary: "Commercial ketchup is secretly a high-sugar dessert masquerading as a savory condiment. 25.0% of the entire bottle is pure sugar. Two tablespoons contain ~8g sugar (equivalent to 2 sugar cubes), heavily masked by vinegar acidity and sodium.",
       claim_verifications: [
-        { claim: "100% Real Juicy Tomatoes", status: "misleading", explanation: "Contains real tomato paste, but at only 26%. The #1 ingredient by weight is water, and the second largest solid is added white sugar (25%).", fssai_rule: "FSSAI Misleading Ingredient Representation" },
+        { claim: "100% Real Juicy Tomatoes", status: "misleading", explanation: "Contains real tomato paste, but at only 26%. The first ingredient by weight is water, and the second largest solid is added white sugar (25%).", fssai_rule: "FSSAI Misleading Ingredient Representation" },
         { claim: "Classic Sweet & Tangy", status: "verified", explanation: "Taste profile produced by combining 25% sugar with acetic acid (INS 260) and salt.", fssai_rule: "Standard flavour description" },
       ],
       price_analysis: undefined,
@@ -904,7 +903,7 @@ const DEMO_AUDITS: { label: string; analysis: ProductAnalysis }[] = [
         hero_percentage: 26.0,
         filler_percentage: 25.0,
         coverage_percentage: 51.0,
-        fssai_disclosure: "Under FSSAI Regulations, Tomato Paste (26%) is declared under statutory QUID rules. Sugar (25%) is derived from the nutrition panel. Water (#1 by weight) and thickeners form the remaining bulk.",
+        fssai_disclosure: "Under FSSAI Regulations, Tomato Paste (26%) is declared under statutory QUID rules. Sugar (25%) is derived from the nutrition panel. (listed first, largest by weight) and thickeners form the remaining bulk.",
         descending_ingredients: [
           "Water",
           "Tomato Paste (26%)",
@@ -1169,7 +1168,7 @@ function IngredientDonutChart({ breakdown }: { breakdown?: IngredientBreakdown }
                     className="inline-flex items-center gap-1 text-[11px] bg-white border border-slate-200 text-slate-700 px-2 py-0.5 rounded-md font-medium"
                   >
                     <span className="text-[9px] font-bold text-indigo-600 bg-indigo-50 px-1 rounded">
-                      #{i + 1}
+                      {i + 1}
                     </span>
                     {ing}
                     {i === 0 && (
@@ -1342,14 +1341,13 @@ const hasAny = (text: string, words: string[]) => words.filter((w) => text.inclu
 // ============================================================
 
 type ProfileId = "diabetic" | "bp" | "gym" | "kids" | "pregnancy";
-const PROFILES: { id: ProfileId; label: string; emoji: string }[] = [
-  { id: "diabetic", label: "Diabetic / sugar control", emoji: "🩸" },
-  { id: "bp", label: "High BP / heart", emoji: "❤️" },
-  { id: "gym", label: "Gym / high protein", emoji: "💪" },
-  { id: "kids", label: "For kids", emoji: "🧒" },
-  { id: "pregnancy", label: "Pregnancy", emoji: "🤰" },
+const PROFILES: { id: ProfileId; label: string }[] = [
+  { id: "diabetic", label: "Diabetic / sugar control" },
+  { id: "bp", label: "High BP / heart" },
+  { id: "gym", label: "Gym / high protein" },
+  { id: "kids", label: "For kids" },
+  { id: "pregnancy", label: "Pregnancy" },
 ];
-const PROFILE_KEY = "labelpadho_profile";
 
 type Insight = { level: "good" | "caution" | "avoid"; text: string };
 
@@ -1447,7 +1445,7 @@ function ProfileCard({ analysis, profile, onChange }: { analysis: ProductAnalysi
         <UserRound className="w-5 h-5 text-indigo-600" />
         Is this OK for me?
       </h3>
-      <p className="text-xs text-slate-500 mb-3">Pick a profile to see what matters for you. Your choice stays on this device.</p>
+      <p className="text-xs text-slate-500 mb-3">Pick one to see what matters for you.</p>
       <div className="flex flex-wrap gap-2 mb-4">
         {PROFILES.map((p) => (
           <button
@@ -1459,7 +1457,7 @@ function ProfileCard({ analysis, profile, onChange }: { analysis: ProductAnalysi
               profile === p.id ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
             }`}
           >
-            {p.emoji} {p.label}
+            {p.label}
           </button>
         ))}
       </div>
@@ -2100,25 +2098,9 @@ export default function LabelPadhoApp({ initialScanId }: { initialScanId?: numbe
       .catch(() => setAlternatives(null));
   }, [analysis?.scan_id]);
 
-  // Health profile (kept on this device)
+  // Health profile: nothing pre-selected; the shopper picks one per product
   const [profile, setProfile] = useState<ProfileId | null>(null);
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem(PROFILE_KEY) as ProfileId | null;
-      if (saved && PROFILES.some((p) => p.id === saved)) setProfile(saved);
-    } catch {
-      /* storage unavailable */
-    }
-  }, []);
-  const changeProfile = (p: ProfileId | null) => {
-    setProfile(p);
-    try {
-      if (p) localStorage.setItem(PROFILE_KEY, p);
-      else localStorage.removeItem(PROFILE_KEY);
-    } catch {
-      /* storage unavailable */
-    }
-  };
+  const changeProfile = (p: ProfileId | null) => setProfile(p);
 
   // Compare panel
   const [compareOpen, setCompareOpen] = useState(false);
@@ -2318,7 +2300,7 @@ export default function LabelPadhoApp({ initialScanId }: { initialScanId?: numbe
           See what's really inside packaged food: misleading claims, hidden sugar and salt, and healthier swaps.
         </p>
         <p className="mt-2.5 text-xs text-slate-500 max-w-xl mx-auto">
-          💡 Inspired by the consumer-awareness movements of changemakers like{" "}
+          Inspired by the consumer-awareness movements of changemakers like{" "}
           <span className="font-semibold text-slate-700">FoodPharmer (Revant Himatsingka)</span> and{" "}
           <span className="font-semibold text-slate-700">Glucose Gal (Pratima Dixit)</span>.
         </p>
@@ -2480,7 +2462,7 @@ export default function LabelPadhoApp({ initialScanId }: { initialScanId?: numbe
                       />
                       <div className="flex items-center justify-between px-1">
                         <span className="text-[11px] font-semibold text-emerald-700 truncate max-w-[140px]">
-                          ✓ {nutritionFile?.name}
+                          <CheckCircle2 className="w-3 h-3 inline -mt-0.5" /> {nutritionFile?.name}
                         </span>
                         <button
                           type="button"
@@ -2520,7 +2502,7 @@ export default function LabelPadhoApp({ initialScanId }: { initialScanId?: numbe
                       />
                       <div className="flex items-center justify-between px-1">
                         <span className="text-[11px] font-semibold text-slate-700 truncate max-w-[140px]">
-                          ✓ {ingredientsFile?.name}
+                          <CheckCircle2 className="w-3 h-3 inline -mt-0.5" /> {ingredientsFile?.name}
                         </span>
                         <button
                           type="button"
@@ -2573,7 +2555,7 @@ export default function LabelPadhoApp({ initialScanId }: { initialScanId?: numbe
                       </div>
                       <div className="flex items-center justify-between px-1">
                         <span className="text-[11px] font-semibold text-amber-800">
-                          ✓ {frontFiles.length} of {MAX_CLAIM_PHOTOS} photos
+                          <CheckCircle2 className="w-3 h-3 inline -mt-0.5" /> {frontFiles.length} of {MAX_CLAIM_PHOTOS} photos
                         </span>
                         {frontFiles.length < MAX_CLAIM_PHOTOS && (
                           <label className="text-[11px] text-emerald-700 font-semibold hover:underline cursor-pointer">
@@ -2699,7 +2681,7 @@ export default function LabelPadhoApp({ initialScanId }: { initialScanId?: numbe
                     </span>
                     {shown.category_display_name && (
                       <span className="text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200/50 px-2.5 py-1 rounded-md">
-                        🏷️ {shown.category_display_name}
+                        {shown.category_display_name}
                         {shown.sub_category_display_name && ` · ${shown.sub_category_display_name}`}
                       </span>
                     )}
@@ -2818,12 +2800,11 @@ export default function LabelPadhoApp({ initialScanId }: { initialScanId?: numbe
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
                   <div className="flex items-start justify-between gap-3 flex-wrap mb-3">
                     <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                      <Trophy className="w-5 h-5 text-amber-500" />
                       Better choices in {alternatives.scope_label}
                     </h3>
                     {alternatives.rank && alternatives.total > 1 && (
                       <span className="text-xs font-semibold px-2.5 py-1 rounded-md bg-slate-100 text-slate-700">
-                        Ranked #{alternatives.rank} of {alternatives.total} on this shelf
+                        Ranked {alternatives.rank} of {alternatives.total} on this shelf
                       </span>
                     )}
                   </div>
@@ -3124,9 +3105,7 @@ export default function LabelPadhoApp({ initialScanId }: { initialScanId?: numbe
       </>
 
       <footer className="mt-12 border-t border-slate-200 pt-6 text-center space-y-1.5">
-        <p className="text-xs font-semibold text-slate-500">Coming next</p>
-        <p className="text-sm text-slate-600">More Indian languages, and prices reported by shoppers near you.</p>
-        <p className="text-[11px] text-slate-400 pt-2">
+        <p className="text-[11px] text-slate-400">
           General guidance from food labels, not medical advice. Some product data from{" "}
           <a href="https://world.openfoodfacts.org" target="_blank" rel="noopener noreferrer" className="underline hover:text-slate-600">
             Open Food Facts

@@ -240,7 +240,7 @@ def test_atwater_calorie_under_reporting_detected(analyzer):
     assert math is not None
     assert math.is_discrepant is True
     assert math.calculated_calories == 210.0
-    assert "Calorie Under-reporting" in math.details
+    assert "Calorie under-reporting" in math.details
 
 
 def test_dessert_category_does_not_suggest_protein_or_calculate_protein_price(analyzer):

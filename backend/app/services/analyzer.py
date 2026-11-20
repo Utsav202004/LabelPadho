@@ -602,7 +602,7 @@ class Analyzer:
                         f"sugar ({pct}% of your daily limit)"
                     )
                 if warnings:
-                    package_note += " ⚠️ " + ". ".join(warnings) + "."
+                    package_note += " " + ". ".join(warnings) + "."
             realistic = f"{realistic} {package_note}".strip()
 
         return ServingReality(
@@ -831,9 +831,9 @@ class Analyzer:
         """
         Suggests 2-3 quick Indian kitchen recipes matching the product's category and craving.
         Each recipe explicitly specifies its Indian dietary classification:
-        - 'veg' (pure vegetarian, 🟢)
-        - 'egg' (contains egg / ovo-vegetarian, 🟡)
-        - 'non_veg' (contains meat/poultry/seafood, 🔴)
+        - 'veg' (pure vegetarian)
+        - 'egg' (contains egg / ovo-vegetarian)
+        - 'non_veg' (contains meat/poultry/seafood)
         """
         all_recipes = HOMEMADE_RECIPES.get("recipes", [])
         cat_str = category.value if hasattr(category, "value") else str(category)
@@ -1249,10 +1249,10 @@ class Analyzer:
             concern = f"**Concerns:** "
             if high:
                 names = ", ".join(f.ingredient_name for f in high)
-                concern += f"⚠️ High concern: {names}. "
+                concern += f"High concern: {names}. "
             if medium:
                 names = ", ".join(f.ingredient_name for f in medium)
-                concern += f"⚡ Moderate concern: {names}."
+                concern += f"Moderate concern: {names}."
             parts.append(concern)
 
         # Para 3: Value
@@ -1301,7 +1301,7 @@ class Analyzer:
                         claim="Multigrain",
                         status="misleading",
                         explanation=(
-                            f"Packaged as 'Multigrain', but the #1 primary ingredient by weight is "
+                            f"Packaged as 'Multigrain', but the first (largest) ingredient by weight is "
                             f"Refined Wheat Flour (Maida). FSSAI allows the term 'multigrain' as long as "
                             f"grains other than wheat make up only a small fraction (>10%), meaning the consumer "
                             f"is mostly eating Maida."
@@ -1807,18 +1807,18 @@ class Analyzer:
         if is_discrepant:
             if calc_kcal > printed:
                 details = (
-                    f"⚠️ Calorie Under-reporting: Printed label claims {printed} kcal, but physical macronutrient "
+                    f"Calorie under-reporting: Printed label claims {printed} kcal, but physical macronutrient "
                     f"math ({p}g protein × 4 + {c}g carbs × 4 + {f}g fat × 9) yields {calc_kcal} kcal. "
                     f"The product contains ~{diff_pct}% more energy than printed!"
                 )
             else:
                 details = (
-                    f"⚠️ Calorie Over-reporting: Printed label claims {printed} kcal, but physical macronutrient "
+                    f"Calorie over-reporting: Printed label claims {printed} kcal, but physical macronutrient "
                     f"math yields {calc_kcal} kcal ({diff_pct}% difference)."
                 )
         else:
             details = (
-                f"✅ Nutrition Table Verified: Printed calories ({printed} kcal) match calculated macronutrient energy "
+                f"Nutrition table checks out: Printed calories ({printed} kcal) match calculated macronutrient energy "
                 f"({calc_kcal} kcal) within standard regulatory margin of error ({diff_pct}%)."
             )
 
@@ -2095,7 +2095,7 @@ class Analyzer:
             "Under FSSAI Labelling Regulations (Regulation 5), companies are only legally required "
             "to declare exact percentages for characterizing or advertised 'hero' ingredients (QUID). "
             "For all other base ingredients and additives, Indian law mandates they must be listed in "
-            "strict descending order of weight (the #1 ingredient is present in the largest quantity). "
+            "strict descending order of weight (the first ingredient is present in the largest quantity). "
             "LabelPadho groups undeclared ingredients together rather than fabricating unverified percentages."
         )
 

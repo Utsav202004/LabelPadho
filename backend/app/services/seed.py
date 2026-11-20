@@ -37,6 +37,10 @@ SEARCH_FIELDS = off.FIELDS + ",completeness,unique_scans_n"
 SKIP_CATEGORIES = ("en:waters", "en:spring-waters", "en:mineral-waters", "en:salts", "en:table-salts")
 
 
+# Manufacturer names that sometimes end up in the product-name field
+COMPANY_NAMES = {phonetic(w) for w in ["pepsico", "nestle", "itc", "hul", "hindustan unilever", "britannia industries",
+                                        "parle products", "food", "foods", "snacks", "coca cola company"]}
+
 _GENERIC = {"biscuit", "biscuits", "cookie", "cookies", "chips", "namkeen", "noodles", "brand", "flavour",
             "flavor", "flv", "original", "origina", "orignal", "classic", "can", "drink", "fresh", "pure", "taste"}
 
@@ -78,30 +82,51 @@ async def fetch_popular_indian(page: int, page_size: int = 100) -> list[dict]:
     }
     async with httpx.AsyncClient(timeout=30.0, headers={"User-Agent": off.settings.off_user_agent}) as client:
         for attempt in range(4):
-            response = await client.get(f"{off.settings.off_base_url}/api/v2/search", params=params)
-            if response.status_code not in (429, 503) or attempt == 3:
-                break
+            try:
+                response = await client.get(f"{off.settings.off_base_url}/api/v2/search", params=params)
+                if response.status_code not in (429, 502, 503, 504):
+                    break
+                problem = f"HTTP {response.status_code}"
+            except httpx.TransportError as e:  # timeouts, dropped connections
+                problem = type(e).__name__
+            if attempt == 3:
+                raise httpx.HTTPError(f"Open Food Facts unavailable after retries ({problem})")
             wait = 15 * (attempt + 1)  # OFF rate-limits search; back off politely
-            logger.warning("Open Food Facts busy (%s), retrying in %ss", response.status_code, wait)
+            logger.warning("Open Food Facts busy (%s), retrying in %ss", problem, wait)
             await asyncio.sleep(wait)
     response.raise_for_status()
     return response.json().get("products", [])
 
 
-async def seed_from_open_food_facts(session: Session, target: int = 100, max_pages: int = 5) -> dict:
+async def seed_from_open_food_facts(
+    session: Session, target: int = 100, max_pages: int | None = None, start_page: int = 1
+) -> dict:
+    # Roughly 2 in 5 listings pass the quality filters, and already-seeded ones are
+    # skipped, so look through enough pages (100 listings each) to reach the target.
+    if max_pages is None:
+        max_pages = min(20, 3 + (target * 5) // 100)
     analyzer = Analyzer()
     rows = session.exec(select(ProductScan.barcode, ProductScan.brand, ProductScan.product_name)).all()
     existing = {r[0] for r in rows if r[0]}
     identities = {product_identity(r[1], r[2]) for r in rows}
+    stopped_early: str | None = None
     added, skipped = [], {"not_indian": 0, "low_quality": 0, "already_in_catalog": 0, "no_nutrition": 0,
                           "duplicate_pack_size": 0, "not_checkable": 0}
 
-    for page in range(1, max_pages + 1):
+    last_page = start_page - 1
+    for page in range(start_page, start_page + max_pages):
         if len(added) >= target:
             break
-        if page > 1:
+        if page > start_page:
             await asyncio.sleep(6)  # OFF allows ~10 search requests per minute
-        products = await fetch_popular_indian(page)
+        try:
+            products = await fetch_popular_indian(page)
+        except httpx.HTTPError as e:
+            # Keep what we've added so far; running the seed again continues from here
+            logger.warning("Stopping seed early at page %d: %s", page, e)
+            stopped_early = str(e)
+            break
+        last_page = page
         if not products:
             break
         for product in products:
@@ -125,7 +150,11 @@ async def seed_from_open_food_facts(session: Session, target: int = 100, max_pag
                 skipped["no_nutrition"] += 1
                 continue
             name_core = phonetic(extraction.product_name or "")
-            if not name_core or name_core in {phonetic(extraction.brand or "")}:  # name is just the brand, e.g. "Kissan"
+            if (
+                not name_core
+                or name_core == phonetic(extraction.brand or "")  # name is just the brand, e.g. "Kissan"
+                or name_core in COMPANY_NAMES  # name is the manufacturer, e.g. "Pepsico"
+            ):
                 skipped["low_quality"] += 1
                 continue
             identity = product_identity(extraction.brand, extraction.product_name)
@@ -140,4 +169,10 @@ async def seed_from_open_food_facts(session: Session, target: int = 100, max_pag
             added.append(f"{record.brand or ''} {record.product_name}".strip())
 
     logger.info("Seeded %d products from Open Food Facts (skipped: %s)", len(added), skipped)
-    return {"added": len(added), "skipped": skipped, "products": added}
+    result = {"added": len(added), "skipped": skipped, "products": added}
+    if stopped_early:
+        result["stopped_early"] = (
+            f"{stopped_early}. Run the seed again later with start_page={last_page + 1} to continue."
+        )
+    result["last_page"] = last_page
+    return result

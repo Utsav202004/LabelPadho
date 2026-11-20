@@ -28,7 +28,7 @@ export default async function Image({ params }: { params: Promise<{ id: string }
             <div style={{ display: "flex", fontSize: 56, fontWeight: 800, color: "#0f172a", lineHeight: 1.1 }}>{audit?.title ?? "Food label audit"}</div>
             {audit?.category && <div style={{ display: "flex", fontSize: 28, color: "#4f46e5", marginTop: 12 }}>{audit.category}</div>}
             {audit?.worst && (
-              <div style={{ fontSize: 30, color: "#b91c1c", marginTop: 20, display: "flex" }}>⚠ {audit.worst}</div>
+              <div style={{ fontSize: 30, color: "#b91c1c", marginTop: 20, display: "flex" }}>Watch out: {audit.worst}</div>
             )}
           </div>
         </div>

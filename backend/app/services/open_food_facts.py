@@ -158,15 +158,22 @@ def split_ingredients(text: str) -> list[ExtractedIngredient]:
 
 
 _PACK_NOISE = re.compile(
-    r"\b(\d+(\.\d+)?\s*(g|gm|gms|grm|grams?|kg|ml|l|ltr)|(rs\.?|₹)\s*\d+|\d+\s*rs|pc|pcs|pack|pouch|mrp)\b\.?",
+    r"(\d+(\.\d+)?\s*(g|gm|gms|grm|grams?|kg|ml|l|ltr|ktr)\b|\b(rs\.?|₹)\s*\d+|\b\d+\s*rs\b"
+    r"|\b(pc|pcs|pack|pouch|mrp|tpk|tetra\s*pack|pet|can|bottle)\b|\b\d{8,14}\b)\.?",
     re.IGNORECASE,
 )
 
 
 def clean_off_name(raw: str) -> str | None:
-    """Crowd-sourced names often include pack size / price: 'Maggi Noodles Masala 70Grm Pc' → 'Maggi Noodles Masala'."""
-    cleaned = " ".join(_PACK_NOISE.sub(" ", raw).split()).strip(" -,|")
-    return cleaned or (raw.strip() or None)
+    """
+    Crowd-sourced names often include pack size, price or the barcode itself:
+    'Maggi Noodles Masala 70Grm Pc' → 'Maggi Noodles Masala', 'Bhujia400g' → 'Bhujia'.
+    Returns None when nothing meaningful is left (e.g. the name was just digits).
+    """
+    cleaned = " ".join(_PACK_NOISE.sub(" ", raw).split()).strip(" -,|()")
+    if sum(c.isalpha() for c in cleaned) < 3:
+        return None
+    return cleaned
 
 
 def _category(tags: list[str], name: str | None = None) -> tuple[ProductCategory, str | None]:
