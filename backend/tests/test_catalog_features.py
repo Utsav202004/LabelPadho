@@ -378,6 +378,8 @@ def test_off_names_are_cleaned_of_pack_sizes_and_barcodes():
     assert clean_off_name("Jim Jam92 G") == "Jim Jam"
     assert clean_off_name("Real Fruit Power Mixed Fruit 1Ktr Tpk") == "Real Fruit Power Mixed Fruit"
     assert clean_off_name("8906002006601") is None
+    assert clean_off_name("50-50") == "50-50"  # real Britannia biscuit, must not be dropped
+    assert clean_off_name("Gems") == "Gems"
     assert clean_off_name("7Up Super Duper") == "7Up Super Duper"
     assert clean_off_name("99% Cacao Dark Chocolate") == "99% Cacao Dark Chocolate"
 

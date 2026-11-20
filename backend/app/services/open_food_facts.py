@@ -171,7 +171,9 @@ def clean_off_name(raw: str) -> str | None:
     Returns None when nothing meaningful is left (e.g. the name was just digits).
     """
     cleaned = " ".join(_PACK_NOISE.sub(" ", raw).split()).strip(" -,|()")
-    if sum(c.isalpha() for c in cleaned) < 3:
+    # Only drop a name when nothing is left (it was just a barcode / pack size).
+    # Short or number-style names are real products: "50-50", "7Up", "Gems".
+    if not any(c.isalnum() for c in cleaned):
         return None
     return cleaned
 
