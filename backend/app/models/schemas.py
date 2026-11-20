@@ -215,6 +215,10 @@ class LabelExtraction(BaseModel):
         None,
         description="Maximum Retail Price (MRP ₹, incl. of all taxes) printed on the pack, as a number"
     )
+    barcode: str | None = Field(
+        None,
+        description="EAN/UPC barcode digits printed under the barcode (8-14 digits), only if clearly legible"
+    )
     net_weight_g: float | None = Field(
         None,
         description="Net weight/quantity of the package in grams"
@@ -453,6 +457,12 @@ class MathVerification(BaseModel):
     details: str = Field(default="", description="Explanation of whether calories are under/over-reported")
 
 
+class ScoreFactor(BaseModel):
+    """One transparent +/- adjustment behind the health score."""
+    points: float
+    label: str
+
+
 class ProductAnalysis(BaseModel):
     """
     The complete analysis output — this is what the API returns.
@@ -463,6 +473,11 @@ class ProductAnalysis(BaseModel):
 
     # Saved catalog record this analysis belongs to (None for demo audits)
     scan_id: int | None = None
+    data_source: str | None = Field(
+        None, description="'label_scan' (photos + Gemini) or 'open_food_facts' (barcode database)"
+    )
+    report_count: int = Field(0, description="How many users reported this audit as wrong")
+    language: str = Field("en", description="Language of the human-readable text")
 
     # Raw extraction
     extraction: LabelExtraction
@@ -504,6 +519,11 @@ class ProductAnalysis(BaseModel):
         description="1-10 score based on ingredient quality, nutrient balance, and flags",
         ge=1, le=10
     )
+    score_factors: list[ScoreFactor] = Field(
+        default_factory=list,
+        description="Why the score is what it is: each +/- adjustment from a base of 7",
+    )
+    score_basis: str = Field(default="per 100g", description="Nutrition basis used for scoring")
     one_line_summary: str = Field(
         default="",
         description="One-line plain-language verdict, e.g., 'Marketed as healthy but high in sugar and sodium'"

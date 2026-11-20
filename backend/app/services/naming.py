@@ -62,9 +62,12 @@ def standardize_name(value: str | None) -> str | None:
 
 def display_name(brand: str | None, product_name: str | None, variant: str | None) -> str:
     """'Britannia Bourbon (Chocolate Cream)' — avoids repeating the brand if the name already has it."""
+    def squash(text: str) -> str:  # "Lay's" == "Lays"
+        return re.sub(r"[^a-z0-9]", "", text.lower())
+
     name = product_name or "Food Product"
-    if brand and not name.lower().startswith(brand.lower()):
+    if brand and not squash(name).startswith(squash(brand)):
         name = f"{brand} {name}"
-    if variant and variant.lower() not in name.lower():
+    if variant and squash(variant) not in squash(name):
         name = f"{name} ({variant})"
     return name

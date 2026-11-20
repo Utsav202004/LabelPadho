@@ -769,3 +769,49 @@ def test_per_serving_derived_from_per_100g_when_missing():
     )
     fixed = sanitize_extraction(extraction).nutrition_per_serving
     assert (fixed.protein_g, fixed.sugar_g, fixed.sodium_mg) == (2.0, 5.0, 100.0)
+
+
+# --- Per-100g scoring: serving size can't game the score ---------------------
+
+def _biscuit(serving_g: float) -> LabelExtraction:
+    """Same biscuit (37g sugar, 420mg sodium per 100g) labelled with different serving sizes."""
+    f = serving_g / 100
+    return LabelExtraction(
+        product_name="Cream Biscuit",
+        product_category=ProductCategory.DESSERT_SWEET,
+        ingredients=[ExtractedIngredient(name=n) for n in ["Maida", "Sugar", "Palm Oil", "Cocoa", "Salt", "Emulsifier"]],
+        nutrition_per_serving=NutritionInfo(
+            serving_size_g=serving_g, sugar_g=37 * f, sodium_mg=420 * f, saturated_fat_g=10.5 * f,
+        ),
+    )
+
+
+def test_tiny_serving_size_does_not_improve_score(analyzer):
+    small = analyzer.analyze(_biscuit(10))
+    big = analyzer.analyze(_biscuit(50))
+    assert small.health_score == big.health_score
+    assert small.score_basis == "per 100g"
+
+
+def test_score_factors_explain_the_score(analyzer):
+    analysis = analyzer.analyze(_biscuit(16.7))
+    labels = [f.label for f in analysis.score_factors]
+    assert any("High sugar 37.0g/100g" in label for label in labels)
+    assert any("Saturated fat 10.5g/100g" in label for label in labels)
+    # score == clamp(round(7 + sum of factors))
+    expected = max(1, min(10, round(7 + sum(f.points for f in analysis.score_factors))))
+    assert analysis.health_score == expected
+
+
+def test_one_liner_never_says_no_red_flags_for_a_low_score(analyzer):
+    salty = LabelExtraction(
+        product_name="Masala Noodles", product_category=ProductCategory.SAVORY_SNACK,
+        ingredients=[ExtractedIngredient(name=f"Ingredient {i}") for i in range(20)],
+        nutrition_per_100g=NutritionInfo(serving_size_g=100, sodium_mg=1230, trans_fat_g=0.25, saturated_fat_g=7),
+        nutrition_per_serving=NutritionInfo(serving_size_g=70),
+    )
+    analysis = analyzer.analyze(salty)
+    assert analysis.health_score <= 4
+    assert "no major red flags" not in analysis.one_line_summary
+    assert "scores low" in analysis.one_line_summary
+    assert any(f.label == "Trans fat 0.25g/100g" for f in analysis.score_factors)

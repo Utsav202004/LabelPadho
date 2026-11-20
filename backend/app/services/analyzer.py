@@ -47,6 +47,7 @@ from pathlib import Path
 from app.services.naming import standardize_name
 from app.models.schemas import (
     SUB_CATEGORIES,
+    ScoreFactor,
     ClaimVerification,
     EducationalNote,
     ExtractedIngredient,
@@ -323,10 +324,10 @@ class Analyzer:
         ingredient_breakdown = self._analyze_ingredient_breakdown(extraction)
 
         # Compute health score with category awareness
-        health_score = self._compute_health_score(extraction, flags)
+        health_score, score_factors, score_basis = self.score_with_reasons(extraction, flags)
 
         # Generate summaries
-        one_liner = self._generate_one_liner(extraction, flags, serving)
+        one_liner = self._generate_one_liner(extraction, flags, serving, health_score, score_factors)
         detailed = self._generate_detailed_summary(
             extraction, flags, serving, price, alternatives
         )
@@ -358,6 +359,8 @@ class Analyzer:
             claim_verifications=claim_verifications,
             math_verification=math_verification,
             health_score=health_score,
+            score_factors=score_factors,
+            score_basis=score_basis,
             one_line_summary=one_liner,
             detailed_summary=detailed,
         )
@@ -1051,124 +1054,129 @@ class Analyzer:
     def _compute_health_score(
         self, extraction: LabelExtraction, flags: list[IngredientFlag]
     ) -> int:
-        """
-        Compute a category-aware 1-10 health score.
+        return self.score_with_reasons(extraction, flags)[0]
 
-        A dessert should NOT be penalized for lacking protein.
-        A protein bar SHOULD be held accountable for high protein density.
-        A soda should be penalized for liquid sugar spikes.
-        A savory snack should be scrutinized for sodium and palm oil.
+    @staticmethod
+    def nutrition_per_100(extraction: LabelExtraction) -> tuple[NutritionInfo, str]:
         """
-        score = 7.0
-        nutrition = extraction.nutrition_per_serving
+        Per-100g (or 100ml) nutrition for fair comparison.
+
+        Scoring per serving lets brands look healthier just by printing a
+        smaller serving, which is the exact trick this app exposes. So scores
+        are computed per 100g, from the label's per-100g column when present,
+        otherwise scaled from the per-serving column.
+        """
+        per_100 = extraction.nutrition_per_100g
+        if _has_nutrients(per_100):
+            return per_100, "per 100g"
+        serving = extraction.nutrition_per_serving
+        if serving.serving_size_g and serving.serving_size_g > 0:
+            factor = 100 / serving.serving_size_g
+            return serving.model_copy(update={
+                f: (v * factor if (v := getattr(serving, f)) is not None else None)
+                for f in NUTRIENT_FIELDS
+            } | {"serving_size_g": 100}), "per 100g"
+        return serving, "per serving (no serving size on label)"
+
+    def score_with_reasons(
+        self, extraction: LabelExtraction, flags: list[IngredientFlag]
+    ) -> tuple[int, list[ScoreFactor], str]:
+        """
+        Category-aware 1-10 health score with a human-readable breakdown.
+
+        Starts at 7 and applies transparent +/- adjustments. Thresholds per 100g
+        follow the UK FSA front-of-pack "traffic light" bands (high/medium sugar,
+        salt and fat), which match FSSAI's proposed HFSS limits closely.
+        A dessert is not penalised for lacking protein; a protein bar is held to
+        its protein promise; drinks are judged per 100ml with stricter sugar bands.
+        """
+        n, basis = self.nutrition_per_100(extraction)
         category = extraction.product_category or ProductCategory.GENERAL_PACKAGED
+        is_drink = category in (ProductCategory.BEVERAGE_SODA, ProductCategory.BEVERAGE_JUICE)
+        unit = "100ml" if is_drink else "100g"
+        factors: list[ScoreFactor] = []
 
-        # 1. Base Deductions: Flagged Ingredients (Additives, Banned substances)
+        def add(points: float, label: str):
+            if points:
+                factors.append(ScoreFactor(points=points, label=label))
+
+        # 1. Flagged ingredients: name the serious ones, group the rest
         for flag in flags:
             if flag.severity == "high":
-                score -= 1.5
-            elif flag.severity == "medium":
-                score -= 0.75
-            elif flag.severity == "low":
-                score -= 0.25
+                add(-1.5, f"{flag.ingredient_name}: {flag.title}")
+        medium = [f for f in flags if f.severity == "medium"]
+        low = [f for f in flags if f.severity == "low"]
+        if medium:
+            add(-0.75 * len(medium), f"{len(medium)} ingredient concern(s): " + ", ".join(f.ingredient_name for f in medium[:3]))
+        if low:
+            add(-0.25 * len(low), f"{len(low)} minor additive note(s)")
 
-        # 2. Universal Deduction: Trans Fats (harmful in any category)
-        if nutrition.trans_fat_g and nutrition.trans_fat_g > 0:
-            score -= 2.0
+        # 2. Trans fat (labels round tiny amounts to 0, so >0.2g is a real signal)
+        if n.trans_fat_g and n.trans_fat_g > 0.2:
+            add(-2.0, f"Trans fat {round(n.trans_fat_g, 2):g}g/{unit}")
 
-        # 3. Universal Deduction: Extreme Ultra-Processing (long chemical ingredient lists)
-        if len(extraction.ingredients) > 15:
-            score -= 1.0
-        elif len(extraction.ingredients) > 10:
-            score -= 0.5
-        elif len(extraction.ingredients) <= 5 and len(extraction.ingredients) > 0:
-            score += 0.5  # Minimal, clean ingredient list bonus
+        # 3. Processing level
+        count = len(extraction.ingredients)
+        if count > 15:
+            add(-1.0, f"Ultra-processed: {count} ingredients")
+        elif count > 10:
+            add(-0.5, f"Long ingredient list ({count})")
+        elif 0 < count <= 5:
+            add(0.5, f"Short, simple ingredient list ({count})")
 
-        # 4. Category-Specific Scoring Rules
-        if category == ProductCategory.DESSERT_SWEET:
-            # Desserts are sweet treats — evaluate clean indulgence, not protein!
-            # Heavy penalty only if sugar is overwhelming (>25g in a single serving)
-            if nutrition.sugar_g and nutrition.sugar_g > 25:
-                score -= 1.5
-            elif nutrition.sugar_g and nutrition.sugar_g > 15:
-                score -= 0.75
+        # 4. Sugar
+        if n.sugar_g is not None:
+            if category == ProductCategory.BEVERAGE_SODA:
+                if n.sugar_g > 8:
+                    add(-3.5, f"Liquid sugar {n.sugar_g:.1f}g/{unit} (very high)")
+                elif n.sugar_g > 4:
+                    add(-1.5, f"Liquid sugar {n.sugar_g:.1f}g/{unit}")
+            elif category == ProductCategory.BEVERAGE_JUICE:
+                if n.sugar_g > 8:
+                    no_fibre = not n.fiber_g or n.fiber_g < 0.5
+                    add(-1.5 if no_fibre else -0.75, f"Sugar {n.sugar_g:.1f}g/{unit}" + (" without fruit fibre" if no_fibre else ""))
+            elif n.sugar_g > 22.5:
+                add(-1.5, f"High sugar {n.sugar_g:.1f}g/{unit}")
+            elif n.sugar_g > 12.5:
+                add(-0.75, f"Moderate sugar {n.sugar_g:.1f}g/{unit}")
 
-            # Saturated fat penalty (palm fat / vanaspati)
-            if nutrition.saturated_fat_g and nutrition.saturated_fat_g > 10:
-                score -= 1.0
+        # 5. Sodium (600mg sodium ≈ 1.5g salt per 100g = "high")
+        if n.sodium_mg:
+            high_na, med_na = (300, 150) if is_drink else (600, 300)
+            heavy = category == ProductCategory.SAVORY_SNACK
+            if n.sodium_mg > high_na:
+                add(-2.0 if heavy else -1.5, f"High sodium {n.sodium_mg:.0f}mg/{unit}")
+            elif n.sodium_mg > med_na:
+                add(-1.0 if heavy else -0.75, f"Moderate sodium {n.sodium_mg:.0f}mg/{unit}")
 
-        elif category == ProductCategory.BEVERAGE_SODA:
-            # Liquid sugar rush has zero satiety and spikes glucose instantly
-            if nutrition.sugar_g and nutrition.sugar_g > 20:
-                score -= 3.0
-            elif nutrition.sugar_g and nutrition.sugar_g > 10:
-                score -= 1.5
+        # 6. Saturated fat (palm oil, vanaspati)
+        if n.saturated_fat_g is not None and not is_drink:
+            if n.saturated_fat_g > 10:
+                add(-1.0, f"Saturated fat {n.saturated_fat_g:.1f}g/{unit} (high)")
+            elif n.saturated_fat_g > 5:
+                add(-0.5, f"Saturated fat {n.saturated_fat_g:.1f}g/{unit}")
 
-        elif category == ProductCategory.BEVERAGE_JUICE:
-            # Packaged juice trap: high sugar without the protective fiber of whole fruit
-            if nutrition.sugar_g and nutrition.sugar_g > 15:
-                if not nutrition.fiber_g or nutrition.fiber_g < 1:
-                    score -= 1.5
-                else:
-                    score -= 0.75
-
-        elif category == ProductCategory.SAVORY_SNACK:
-            # Savory snacks are prone to sodium and palm oil traps
-            if nutrition.sodium_mg and nutrition.sodium_mg > 0:
-                sodium_pct = nutrition.sodium_mg / DAILY_LIMITS["sodium_mg"]
-                if sodium_pct > 0.3:  # >600mg per serving
-                    score -= 2.0
-                elif sodium_pct > 0.15:
-                    score -= 1.0
-
-            # Saturated fat / frying oil penalty
-            if nutrition.saturated_fat_g and nutrition.saturated_fat_g > 8:
-                score -= 1.0
-
-            # Fiber bonus for whole snacks (e.g. roasted chana, makhana)
-            if nutrition.fiber_g and nutrition.fiber_g >= 3:
-                score += 0.5
-
-        elif category == ProductCategory.PROTEIN_FITNESS:
-            # Products sold for fitness MUST deliver real protein
-            if nutrition.protein_g and nutrition.protein_g >= 15:
-                score += 1.5
-            elif nutrition.protein_g and nutrition.protein_g >= 8:
-                score += 0.5
+        # 7. Protein — only a promise for fitness products, a bonus elsewhere
+        if category == ProductCategory.PROTEIN_FITNESS:
+            if n.protein_g and n.protein_g >= 20:
+                add(1.5, f"Real protein {n.protein_g:.1f}g/{unit}")
+            elif n.protein_g and n.protein_g >= 10:
+                add(0.5, f"Some protein {n.protein_g:.1f}g/{unit}")
             else:
-                score -= 1.5  # Fitness item failing protein promise
+                add(-1.5, f"Sold for fitness but only {n.protein_g or 0:.1f}g protein/{unit}")
+        elif n.protein_g and n.protein_g >= 10 and not is_drink:
+            add(0.5, f"Good protein {n.protein_g:.1f}g/{unit}")
 
-            # Sugar penalty for "fitness" bars loaded with candy sugars
-            if nutrition.sugar_g and nutrition.sugar_g > 10:
-                score -= 1.5
+        # 8. Fibre (FSSAI: 3g/100g = source, 6g/100g = high)
+        if n.fiber_g and n.fiber_g >= 6:
+            add(1.0, f"High fibre {n.fiber_g:.1f}g/{unit}")
+        elif n.fiber_g and n.fiber_g >= 3:
+            add(0.5, f"Source of fibre {n.fiber_g:.1f}g/{unit}")
 
-            if nutrition.fiber_g and nutrition.fiber_g >= 3:
-                score += 0.5
-
-        else:
-            # General packaged foods & staples
-            if nutrition.sodium_mg and nutrition.sodium_mg > 0:
-                sodium_pct = nutrition.sodium_mg / DAILY_LIMITS["sodium_mg"]
-                if sodium_pct > 0.3:
-                    score -= 1.5
-                elif sodium_pct > 0.15:
-                    score -= 0.75
-
-            if nutrition.sugar_g and nutrition.sugar_g > 0:
-                sugar_pct = nutrition.sugar_g / DAILY_LIMITS["sugar_g"]
-                if sugar_pct > 0.4:
-                    score -= 1.5
-                elif sugar_pct > 0.2:
-                    score -= 0.75
-
-            if nutrition.protein_g and nutrition.protein_g >= 8:
-                score += 0.5
-
-            if nutrition.fiber_g and nutrition.fiber_g >= 3:
-                score += 0.5
-
-        # Clamp strictly between 1 and 10
-        return max(1, min(10, round(score)))
+        raw = 7.0 + sum(f.points for f in factors)
+        score = max(1, min(10, round(raw)))
+        factors.sort(key=lambda f: f.points)  # worst first
+        return score, factors, basis.replace("100g", unit)
 
     # ========================================================
     # Summary Generation
@@ -1179,9 +1187,12 @@ class Analyzer:
         extraction: LabelExtraction,
         flags: list[IngredientFlag],
         serving: ServingReality | None,
+        health_score: int | None = None,
+        score_factors: list[ScoreFactor] | None = None,
     ) -> str:
-        """Generate a one-line verdict."""
+        """Generate a one-line verdict that never contradicts the score."""
         name = extraction.product_name or "This product"
+        worst = [f.label for f in (score_factors or []) if f.points <= -1][:2]
         high_flags = [f for f in flags if f.severity == "high"]
         misleading = [f for f in flags if f.flag_type == "misleading"]
 
@@ -1193,11 +1204,16 @@ class Analyzer:
         if misleading:
             claims = ", ".join(f'"{m.ingredient_name}"' for m in misleading[:2])
             return f"{name} has marketing claims ({claims}) that may be misleading."
+        if health_score is not None and health_score <= 4 and worst:
+            reasons = " and ".join(w[0].lower() + w[1:] for w in worst)
+            return f"{name} scores low ({health_score}/10), mainly for {reasons}."
         if serving and serving.servings_in_package and serving.servings_in_package > 3:
             return (
                 f"{name} — the label looks decent per serving, but remember: "
                 f"the packet contains {serving.servings_in_package:.0f} servings."
             )
+        if health_score is not None and health_score <= 6 and worst:
+            return f"{name} is okay in moderation. Watch out for {worst[0][0].lower() + worst[0][1:]}."
         return f"{name} — no major red flags found."
 
     def _generate_detailed_summary(

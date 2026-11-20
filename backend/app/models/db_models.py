@@ -37,6 +37,10 @@ class ProductScan(SQLModel, table=True):
     variant: Optional[str] = Field(default=None)
     # MRP printed on the pack (a product fact, shared). What a user paid is never stored.
     mrp_inr: Optional[float] = Field(default=None)
+    # EAN/GTIN barcode digits, for exact matching and instant lookups
+    barcode: Optional[str] = Field(default=None, index=True)
+    # Where the data came from: "label_scan" (Gemini on photos) or "open_food_facts"
+    source: Optional[str] = Field(default=None)
     net_weight_g: Optional[float] = Field(default=None)
     price_inr: Optional[float] = Field(default=None)
     health_score: Optional[int] = Field(default=None)
@@ -64,6 +68,19 @@ class ProductScan(SQLModel, table=True):
     # can correct a misread product name. Never returned by read endpoints.
     edit_token: Optional[str] = Field(default=None)
 
+    # Cached translations of the audit text, e.g. {"hi": {...ProductAnalysis...}}
+    translations_json: Optional[str] = Field(default=None)
+
+
+class DataReport(SQLModel, table=True):
+    """A user's report that a saved audit has wrong data (review queue)."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    scan_id: int = Field(foreign_key="productscan.id", index=True)
+    reason: str = Field(index=True)
+    details: str = Field(default="")
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
+
 
 class ProductScanRead(SQLModel):
     """Lightweight schema returned for list-view history cards."""
@@ -77,6 +94,8 @@ class ProductScanRead(SQLModel):
     variant: Optional[str] = None
     mrp_inr: Optional[float] = None
     net_weight_g: Optional[float] = None
+    barcode: Optional[str] = None
+    source: Optional[str] = None
     price_inr: Optional[float] = None
     health_score: Optional[int] = None
     one_line_summary: str

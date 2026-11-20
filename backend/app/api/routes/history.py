@@ -6,17 +6,23 @@ Provides:
 - GET /api/history/{id}: Fetch full analysis details of a specific past scan
 - PATCH /api/history/{id}: Fix a misread brand/name/variant (only with the scanner's edit token)
 - DELETE /api/history/{id}: Remove a scan from history
+- POST /api/history/{id}/report: Flag an audit as wrong (review queue)
+- GET /api/reports: Review queue (needs REPORTS_ADMIN_KEY)
 """
 
 import json
 import secrets
-from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from datetime import datetime
+from typing import List, Literal, Optional
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy import func
 from pydantic import BaseModel, Field
 from sqlmodel import Session, select
 
 from app.core.db import get_session
-from app.models.db_models import ProductScan, ProductScanRead
+from app.core.rate_limit import SlidingWindowLimiter
+from app.models.db_models import DataReport, ProductScan, ProductScanRead
 from app.models.schemas import ProductAnalysis
 from app.api.routes.products import apply_search_filter
 from app.services.naming import standardize_name
@@ -57,9 +63,16 @@ async def get_scan_details(
     try:
         raw_dict = json.loads(scan.full_analysis_json)
         analysis = ProductAnalysis.model_validate(raw_dict)
-        return analysis.model_copy(update={"scan_id": scan.id})
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to decode saved analysis: {e}")
+    reports = session.exec(
+        select(func.count()).select_from(DataReport).where(DataReport.scan_id == scan.id)
+    ).one()
+    return analysis.model_copy(update={
+        "scan_id": scan.id,
+        "report_count": reports,
+        "data_source": analysis.data_source or scan.source or "label_scan",
+    })
 
 
 class RenameRequest(BaseModel):
@@ -124,3 +137,66 @@ async def delete_scan(
     session.delete(scan)
     session.commit()
     return {"success": True, "message": f"Scan {scan_id} deleted"}
+
+
+class ReportRequest(BaseModel):
+    reason: Literal["wrong_name", "wrong_nutrition", "wrong_ingredients", "wrong_claims", "other"]
+    details: str = Field("", max_length=500)
+
+
+report_limiter = SlidingWindowLimiter("reports", 20)
+
+
+@router.post("/history/{scan_id}/report")
+async def report_scan(
+    scan_id: int,
+    body: ReportRequest,
+    session: Session = Depends(get_session),
+    _rate_limited: None = Depends(report_limiter),
+):
+    """Anyone can flag a shared audit as wrong. Reports feed a review queue; no personal data is stored."""
+    if not session.get(ProductScan, scan_id):
+        raise HTTPException(status_code=404, detail="Scan record not found")
+    session.add(DataReport(scan_id=scan_id, reason=body.reason, details=body.details.strip()))
+    session.commit()
+    count = session.exec(select(func.count()).select_from(DataReport).where(DataReport.scan_id == scan_id)).one()
+    return {"success": True, "report_count": count}
+
+
+class AdminSettings(BaseSettings):
+    reports_admin_key: Optional[str] = None
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
+
+class ReportRead(BaseModel):
+    id: int
+    scan_id: int
+    product_name: str
+    reason: str
+    details: str
+    created_at: datetime
+
+
+@router.get("/reports", response_model=List[ReportRead])
+async def list_reports(
+    x_admin_key: Optional[str] = Header(None),
+    limit: int = Query(50, ge=1, le=200),
+    session: Session = Depends(get_session),
+):
+    """Review queue for reported audits. Disabled unless REPORTS_ADMIN_KEY is set."""
+    admin_key = AdminSettings().reports_admin_key
+    if not admin_key:
+        raise HTTPException(status_code=404, detail="Not found")
+    if not x_admin_key or not secrets.compare_digest(admin_key, x_admin_key):
+        raise HTTPException(status_code=401, detail="Admin key required")
+    rows = session.exec(
+        select(DataReport, ProductScan.product_name)
+        .join(ProductScan, ProductScan.id == DataReport.scan_id)
+        .order_by(DataReport.created_at.desc())
+        .limit(limit)
+    ).all()
+    return [
+        ReportRead(id=r.id, scan_id=r.scan_id, product_name=name, reason=r.reason,
+                   details=r.details, created_at=r.created_at)
+        for r, name in rows
+    ]

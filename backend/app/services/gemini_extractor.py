@@ -268,3 +268,43 @@ class GeminiExtractor:
             f"All available vision models failed. Last error: {last_error}"
         )
 
+
+
+TRANSLATE_PROMPT = """Translate the VALUES of the JSON object below into {language} for Indian shoppers.
+Rules:
+- Use simple, everyday {language} (as spoken at home), not formal or bookish words.
+- Keep numbers, units (g, mg, kcal, ml, %, ₹), brand names, product names, INS/E codes and FSSAI unchanged.
+- Return ONLY a JSON object with exactly the same keys.
+
+{payload}"""
+
+
+async def translate_texts(extractor: "GeminiExtractor", texts: dict[str, str], language: str) -> dict[str, str]:
+    """Translate a flat {key: text} map with Gemini, returning the same keys."""
+    import json as _json
+
+    if not texts:
+        return {}
+    prompt = TRANSLATE_PROMPT.format(language=language, payload=_json.dumps(texts, ensure_ascii=False))
+    config = types.GenerateContentConfig(response_mime_type="application/json", temperature=0.2)
+    last_error = None
+    for model_name in MODEL_CASCADE:
+        try:
+            response = await asyncio.wait_for(
+                asyncio.to_thread(
+                    extractor.client.models.generate_content,
+                    model=model_name, contents=[prompt], config=config,
+                ),
+                timeout=40.0,
+            )
+            data = _json.loads(response.text or "{}")
+            if not isinstance(data, dict):
+                raise ValueError("Translation response was not a JSON object")
+            # Only accept known keys with string values; fall back to the original otherwise
+            return {k: (v if isinstance(v, str) and v.strip() else texts[k]) for k, v in data.items() if k in texts} | {
+                k: t for k, t in texts.items() if k not in data
+            }
+        except Exception as e:  # noqa: BLE001 - try the next model
+            last_error = e
+            logger.warning(f"Translation with '{model_name}' failed: {e}")
+    raise RuntimeError(f"Translation failed: {last_error}")

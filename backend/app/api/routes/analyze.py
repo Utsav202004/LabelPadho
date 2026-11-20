@@ -36,16 +36,16 @@ NEW CONCEPTS:
 """
 
 import logging
-import secrets
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlmodel import Session
 
 from app.core.db import get_session
-from app.models.db_models import ProductScan
+from app.core.rate_limit import scan_limiter
 from app.models.schemas import AnalyzeResponse, ProductAnalysis
 from app.services.analyzer import Analyzer, sanitize_extraction
+from app.services.catalog import save_to_catalog
 from app.services.gemini_extractor import GeminiExtractor
 
 logger = logging.getLogger(__name__)
@@ -101,12 +101,17 @@ async def analyze_label(
         gt=0,
         description="How many grams the user expects to eat (Optional; scales nutrition to a realistic portion)"
     ),
+    barcode: str | None = Form(
+        None,
+        description="EAN/UPC barcode digits if the user scanned it (Optional; enables instant lookups later)",
+    ),
     # Optional user ID for learning system
     user_id: str | None = Form(
         None,
         description="User ID for progressive nutrition learning (Optional)"
     ),
     session: Session = Depends(get_session),
+    _rate_limited: None = Depends(scan_limiter),
 ):
     """
     Analyze food label images and return a comprehensive analysis with claim auditing.
@@ -171,6 +176,10 @@ async def analyze_label(
             extraction.product_name = product_name.strip()
         # Repair per-100g values misread as per-serving etc., so the saved
         # record and the analysis both use corrected numbers
+        if barcode and barcode.strip().isdigit() and 8 <= len(barcode.strip()) <= 14:
+            extraction.barcode = barcode.strip()
+        elif extraction.barcode and not (extraction.barcode.isdigit() and 8 <= len(extraction.barcode) <= 14):
+            extraction.barcode = None  # ignore garbled digits read from the photo
         extraction = sanitize_extraction(extraction)
     except Exception as e:
         logger.error(f"Gemini extraction failed: {e}")
@@ -204,63 +213,19 @@ async def analyze_label(
         f"edu_notes={len(analysis.educational_notes)}"
     )
 
-    # ---- Step 4: Persist scan record to the shared catalog ----
-    # The saved copy is priced at MRP (a product fact). What this user paid is
-    # personal (shop, city, offer), so it is shown to them but never stored.
-    stored_analysis = analysis.model_copy(
-        update={"price_analysis": analyzer.price_analysis_for(extraction, None)}
-    )
-    scan_id: int | None = None
-    edit_token = secrets.token_urlsafe(24)
+    # ---- Step 4: Persist to the shared catalog (never fail the response over it) ----
     try:
-        nutrition = extraction.nutrition_per_serving
-        claims_debunked = len([c for c in analysis.claim_verifications if c.status == "debunked"])
-        claims_misleading = len([c for c in analysis.claim_verifications if c.status == "misleading"])
-        has_cal_discrepancy = bool(
-            analysis.math_verification and analysis.math_verification.is_discrepant
+        record, edit_token = save_to_catalog(
+            session, analyzer, extraction, analysis,
+            source="label_scan", user_id=user_id, fallback_name=product_name,
         )
-
-        scan_record = ProductScan(
-            user_id=user_id,
-            product_name=extraction.product_name or product_name or "Food Product",
-            product_category=analysis.product_category.value if analysis.product_category else "general_packaged",
-            sub_category=analysis.sub_category,
-            brand=extraction.brand,
-            variant=extraction.variant,
-            mrp_inr=extraction.mrp_inr,
-            net_weight_g=extraction.net_weight_g,
-            price_inr=extraction.mrp_inr,
-            health_score=analysis.health_score,
-            one_line_summary=analysis.one_line_summary,
-            protein_per_serving_g=nutrition.protein_g,
-            serving_size_g=nutrition.serving_size_g,
-            calories_per_serving=nutrition.energy_kcal,
-            sodium_per_serving_mg=nutrition.sodium_mg,
-            sugar_per_serving_g=nutrition.sugar_g,
-            price_per_g_protein=(
-                stored_analysis.price_analysis.price_per_g_protein
-                if stored_analysis.price_analysis else None
-            ),
-            flag_count=len(analysis.ingredient_flags),
-            debunked_claims_count=claims_debunked,
-            misleading_claims_count=claims_misleading,
-            has_calorie_discrepancy=has_cal_discrepancy,
-            full_analysis_json=stored_analysis.model_dump_json(),
-            edit_token=edit_token,
-        )
-        session.add(scan_record)
-        session.commit()
-        scan_id = scan_record.id
-        logger.info(f"Saved scan record #{scan_record.id} for '{scan_record.product_name}'")
     except Exception as e:
         logger.error(f"Failed to persist scan record to database: {e}")
-        # We don't fail the user response if database persistence encountered an issue
+        return AnalyzeResponse(success=True, analysis=analysis.model_copy(update={"data_source": "label_scan"}))
 
-    if scan_id is None:
-        return AnalyzeResponse(success=True, analysis=analysis)
     return AnalyzeResponse(
         success=True,
-        analysis=analysis.model_copy(update={"scan_id": scan_id}),
-        scan_id=scan_id,
+        analysis=analysis.model_copy(update={"scan_id": record.id, "data_source": "label_scan"}),
+        scan_id=record.id,
         edit_token=edit_token,
     )

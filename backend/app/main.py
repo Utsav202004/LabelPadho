@@ -34,7 +34,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import analyze, health, history, products
+from app.api.routes import analyze, health, history, products, translate
 from app.core.db import IS_SQLITE, init_db
 
 # Configure logging so we can see what's happening
@@ -110,6 +110,7 @@ app.include_router(health.router, prefix="/api", tags=["health"])
 app.include_router(analyze.router, prefix="/api", tags=["analysis"])
 app.include_router(history.router, prefix="/api", tags=["history"])
 app.include_router(products.router, prefix="/api", tags=["products"])
+app.include_router(translate.router, prefix="/api", tags=["translation"])
 
 
 @app.get("/")

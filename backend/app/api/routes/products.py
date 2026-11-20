@@ -9,8 +9,10 @@ re-running Gemini extraction.
 - GET /api/products/search?q=maggi        → unique products matching every search word
 - GET /api/products/suggestions           → latest unique products (search dropdown before typing)
 - GET /api/products/{id}/alternatives     → better-scoring products on the same shelf + rank
+- GET /api/products/barcode/{code}        → catalog hit, else Open Food Facts, else "scan the label"
 """
 
+import logging
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -20,9 +22,17 @@ from sqlmodel import Session, select
 
 from app.core.db import get_session
 from app.models.db_models import ProductScan, ProductScanRead
+from app.core.rate_limit import SlidingWindowLimiter
 from app.models.schemas import SUB_CATEGORIES
+from app.services import open_food_facts as off
+from app.services.analyzer import Analyzer, sanitize_extraction
+from app.services.catalog import save_to_catalog
+from app.services.open_food_facts import is_valid_barcode
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
+_analyzer = Analyzer()
+barcode_limiter = SlidingWindowLimiter("barcode lookups", 60)
 
 
 def _normalize(text: str | None) -> str:
@@ -153,3 +163,53 @@ async def product_alternatives(
     rank = next((i + 1 for i, r in enumerate(ranked) if _product_key(r) == me), None)
     better = [r for r in ranked if _product_key(r) != me and (r.health_score or 0) > my_score][:limit]
     return AlternativesResponse(scope=scope, scope_label=label, rank=rank, total=len(ranked), better=better)
+
+
+class BarcodeResponse(BaseModel):
+    found: bool
+    source: Optional[str] = None  # "catalog" | "open_food_facts"
+    scan_id: Optional[int] = None
+    message: str = ""
+
+
+@router.get("/products/barcode/{code}", response_model=BarcodeResponse)
+async def lookup_barcode(
+    code: str,
+    session: Session = Depends(get_session),
+    _rate_limited: None = Depends(barcode_limiter),
+):
+    """
+    Instant lookup by barcode.
+
+    1. Already in our catalog → return it (no AI, no network).
+    2. Known to Open Food Facts → build an audit from its data with the same
+       deterministic engine, save it to the catalog, return it.
+    3. Unknown → ask the shopper to photograph the label.
+    """
+    code = code.strip()
+    if not is_valid_barcode(code):
+        raise HTTPException(status_code=422, detail="A barcode should be 8 to 14 digits.")
+
+    existing = session.exec(
+        select(ProductScan).where(ProductScan.barcode == code).order_by(ProductScan.created_at.desc())
+    ).first()
+    if existing:
+        return BarcodeResponse(found=True, source="catalog", scan_id=existing.id)
+
+    try:
+        product = await off.fetch_product(code)
+    except Exception as e:  # network/OFF outage shouldn't look like "not found"
+        logger.warning("Open Food Facts lookup failed for %s: %s", code, e)
+        raise HTTPException(status_code=502, detail="Barcode database is unreachable right now. Please scan the label instead.")
+
+    extraction = off.to_extraction(product, code) if product else None
+    if extraction is None:
+        return BarcodeResponse(
+            found=False,
+            message="This product isn't in any database yet. Photograph its label below and you'll be the first to add it!",
+        )
+
+    extraction = sanitize_extraction(extraction)
+    analysis = _analyzer.analyze(extraction)
+    record, _ = save_to_catalog(session, _analyzer, extraction, analysis, source="open_food_facts")
+    return BarcodeResponse(found=True, source="open_food_facts", scan_id=record.id)

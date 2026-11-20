@@ -44,6 +44,7 @@ def test_standardize_name(raw, expected):
 def test_display_name_does_not_repeat_brand_or_variant():
     assert display_name("Britannia", "Bourbon", "Chocolate Cream") == "Britannia Bourbon (Chocolate Cream)"
     assert display_name("Haldiram's", "Haldiram's Aloo Bhujia", None) == "Haldiram's Aloo Bhujia"
+    assert display_name("Lay's", "Lays Classics Salted", None) == "Lays Classics Salted"
 
 
 def test_sanitize_standardises_names_and_validates_sub_category():
@@ -197,3 +198,143 @@ def test_add_missing_columns_upgrades_an_old_table(monkeypatch):
     cols = {c["name"] for c in inspect(engine).get_columns("productscan")}
     assert {"variant", "sub_category", "mrp_inr", "net_weight_g", "edit_token"} <= cols
     db_module.add_missing_columns()  # idempotent
+
+
+# --- Rate limiting -------------------------------------------------------------------
+
+def test_rate_limiter_blocks_after_limit_and_uses_rightmost_forwarded_ip():
+    from fastapi import HTTPException
+    from starlette.requests import Request
+
+    from app.core.rate_limit import SlidingWindowLimiter, client_ip
+
+    limiter = SlidingWindowLimiter("label scans", limit=2)
+    limiter.check("1.1.1.1")
+    limiter.check("1.1.1.1")
+    limiter.check("2.2.2.2")  # other clients unaffected
+    with pytest.raises(HTTPException) as exc:
+        limiter.check("1.1.1.1")
+    assert exc.value.status_code == 429
+    assert "Retry-After" in exc.value.headers
+
+    spoofed = Request({"type": "http", "headers": [(b"x-forwarded-for", b"6.6.6.6, 9.9.9.9")], "client": ("10.0.0.1", 1)})
+    assert client_ip(spoofed) == "9.9.9.9"
+
+
+def test_analyze_endpoint_is_rate_limited(client):
+    from app.core.rate_limit import scan_limiter
+
+    c, _ = client
+    scan_limiter.reset()
+    original = scan_limiter.limit
+    scan_limiter.limit = 1
+    try:
+        # First call passes the limiter (then fails validation: no image); second is blocked
+        assert c.post("/api/analyze").status_code == 422
+        assert c.post("/api/analyze").status_code == 429
+    finally:
+        scan_limiter.limit = original
+        scan_limiter.reset()
+
+
+# --- Barcode + Open Food Facts --------------------------------------------------------
+
+OFF_MAGGI = {
+    "product_name": "Maggi Masala Noodles", "brands": "Maggi,Nestlé", "product_quantity": 70,
+    "serving_quantity": 70, "categories_tags": ["en:plant-based-foods"],
+    "ingredients_text_en": "Noodles (Wheat Flour (Atta) (62%), Palm Oil, Salt), Masala (Spices (12%), Sugar), Thickener (INS 508)",
+    "nutriments": {"energy-kcal_100g": 427, "proteins_100g": 9.2, "fat_100g": 15.6, "saturated-fat_100g": 7.4,
+                   "carbohydrates_100g": 62.8, "sugars_100g": 1.9, "sodium_100g": 1.23},
+}
+
+
+def test_off_product_maps_to_extraction():
+    from app.services.open_food_facts import split_ingredients, to_extraction
+
+    e = to_extraction(OFF_MAGGI, "8901058851298")
+    assert (e.brand, e.product_name, e.barcode) == ("Maggi", "Maggi Masala Noodles", "8901058851298")
+    assert e.sub_category == "instant_noodles"  # from the product name when tags are vague
+    assert e.nutrition_per_100g.sodium_mg == 1230.0  # g → mg
+    assert [i.name.split(" (")[0] for i in e.ingredients] == ["Noodles", "Masala", "Thickener"]
+    assert split_ingredients("Sugar (40%), Cocoa")[0].percentage == 40.0
+    assert to_extraction({"nutriments": {}}, "12345678") is None
+
+
+def test_barcode_lookup_uses_catalog_then_off(client, monkeypatch):
+    from app.services import open_food_facts as off
+
+    c, ids = client
+    assert c.get("/api/products/barcode/12ab").status_code == 422
+
+    calls = []
+
+    async def fake_fetch(code):
+        calls.append(code)
+        return OFF_MAGGI if code == "8901058851298" else None
+
+    monkeypatch.setattr(off, "fetch_product", fake_fetch)
+    first = c.get("/api/products/barcode/8901058851298").json()
+    assert first["found"] and first["source"] == "open_food_facts"
+    audit = c.get(f"/api/history/{first['scan_id']}").json()
+    assert audit["data_source"] == "open_food_facts" and audit["sub_category"] == "instant_noodles"
+
+    again = c.get("/api/products/barcode/8901058851298").json()
+    assert again["source"] == "catalog" and again["scan_id"] == first["scan_id"]
+    assert calls == ["8901058851298"]  # second lookup never hit the network
+
+    missing = c.get("/api/products/barcode/00000000").json()
+    assert missing["found"] is False and "Photograph its label" in missing["message"]
+
+
+# --- Reports ----------------------------------------------------------------------------
+
+def test_reports_are_counted_and_admin_queue_is_protected(client, monkeypatch):
+    c, ids = client
+    url = f"/api/history/{ids['Bourbon']}/report"
+    assert c.post(url, json={"reason": "made_up"}).status_code == 422
+    assert c.post(url, json={"reason": "wrong_nutrition", "details": "sugar looks off"}).json()["report_count"] == 1
+    assert c.get(f"/api/history/{ids['Bourbon']}").status_code in (200, 500)  # seeded rows have empty JSON
+
+    assert c.get("/api/reports").status_code == 404  # disabled without an admin key
+    monkeypatch.setenv("REPORTS_ADMIN_KEY", "admin-secret")
+    assert c.get("/api/reports").status_code == 401
+    rows = c.get("/api/reports", headers={"X-Admin-Key": "admin-secret"}).json()
+    assert rows[0]["product_name"] == "Bourbon" and rows[0]["reason"] == "wrong_nutrition"
+
+
+# --- Translation --------------------------------------------------------------------------
+
+def test_translation_changes_prose_only_and_is_cached(client, monkeypatch):
+    import json as _json
+
+    from app.api.routes import translate as translate_route
+    from app.core.db import get_session as _gs
+
+    c, _ = client
+    analysis = Analyzer().analyze(LabelExtraction(
+        product_name="Chips", product_category=ProductCategory.SAVORY_SNACK,
+        nutrition_per_serving=NutritionInfo(serving_size_g=30, servings_per_package=5, sodium_mg=300),
+        net_weight_g=150,
+    ))
+    session = next(app.dependency_overrides[_gs]())
+    scan = ProductScan(product_name="Chips", full_analysis_json=analysis.model_dump_json(), health_score=analysis.health_score)
+    session.add(scan)
+    session.commit()
+
+    calls = []
+
+    async def fake_translate(_extractor, texts, language):
+        calls.append(language)
+        return {k: f"HI:{v}" for k, v in texts.items()}
+
+    monkeypatch.setattr(translate_route, "translate_texts", fake_translate)
+    out = c.post("/api/translate", json={"scan_id": scan.id, "lang": "hi"}).json()
+    assert out["language"] == "hi"
+    assert out["one_line_summary"].startswith("HI:")
+    assert out["health_score"] == analysis.health_score  # numbers untouched
+    assert out["serving_reality"]["nutrition_full_package"]["sodium_mg"] == 1500.0
+
+    c.post("/api/translate", json={"scan_id": scan.id, "lang": "hi"})
+    assert len(calls) == 1  # second request served from cache
+    session.refresh(scan)
+    assert "hi" in _json.loads(scan.translations_json)

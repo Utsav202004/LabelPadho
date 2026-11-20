@@ -18,12 +18,20 @@ Take up to three kinds of photos (nutrition table, ingredients, front of pack + 
 | **Portion reality check** | What your real portion contains, not the brand's tiny "serving" | A 150g chips pack with a 30g serving → full pack = 1,500mg sodium |
 | **Calorie math check** | Atwater formula (4/4/9 kcal per g) re-computes energy to catch rigged tables | Flags labels whose printed kcal doesn't match their macros |
 | **Flagged additives** | Additives banned or restricted in the EU/US but common in India | Tartrazine (INS 102), Potassium Bromate, TBHQ |
-| **Health score + shelf ranking** | 1–10 score, ranked against products **on the same shelf** | "Ranked #3 of 4 in Popcorn", with healthier options listed |
+| **Health score you can trust** | 1–10 score judged **per 100g** (so tiny serving sizes can't flatter it), with every +/- point explained | Maggi 2/10: −2 high sodium 1,232mg/100g, −2 trans fat |
+| **Shelf ranking** | Ranked against products **on the same shelf**, with healthier options | "Ranked #3 of 4 in Popcorn" |
+| **"Is this OK for me?"** | Pick a profile (diabetic, high BP, gym, kids, pregnancy) for a personal verdict | High BP + Maggi → "Better to avoid: 1,232mg sodium per 100g" |
+| **Compare side by side** | Any two products per 100g, with the better value highlighted on each row | Maggi vs Lay's: sugar, sodium, saturated fat, protein, ₹/g protein |
 | **Value for money** | Price per gram of protein / fibre, from the MRP printed on the pack (or what you paid) | "You paid 20% below MRP" |
 | **Desi swaps + home recipes** | Cheaper whole-food alternatives and quick Indian recipes in the same craving category | Roasted chana instead of a ₹150 protein bar |
+| **हिंदी में पढ़ें** | One tap shows the audit's verdicts and explanations in simple Hindi | Numbers and scores stay exactly the same |
+| **Share on WhatsApp** | Every audit has its own link with a preview card (score, product, worst finding) | `labelpadho.utsavgoyal.tech/p/123` |
 
-### Search instead of scanning
-Every product anyone scans goes into a **shared catalog**. The next person can search "bourbon", "bhujia" or "ragi chips" and open the full audit instantly, with no photos and no AI call. The search box suggests recently scanned products before you type, plus sample audits for a quick demo.
+### Search or scan a barcode instead of photographing
+Every product anyone scans goes into a **shared catalog**. The next person can:
+- **Search** "bourbon", "bhujia" or "ragi chips" and open the full audit instantly, with no photos and no AI call. Suggestions show before you type.
+- **Scan the barcode** with the phone camera (or type the digits). If the product is in our catalog, it opens instantly. If not, LabelPadho checks **[Open Food Facts](https://world.openfoodfacts.org)**, the free open food database, builds the audit from its data and adds it to the catalog. If nobody has the product yet, you photograph the label once and the barcode is saved for everyone after you.
+- **Report wrong data** on any audit, so the community catalog stays accurate.
 
 ---
 
@@ -33,7 +41,7 @@ Every product anyone scans goes into a **shared catalog**. The next person can s
 flowchart TD
     subgraph Client["Frontend · Next.js + TypeScript (Vercel)"]
         UP["Photo upload (nutrition, ingredients, 1–4 claim photos)"]
-        SR["Catalog search + suggestions"]
+        SR["Search · barcode scan · compare · profiles · share links"]
     end
 
     subgraph API["Backend · FastAPI (Render)"]
@@ -41,18 +49,21 @@ flowchart TD
         GEM["Gemini Flash vision<br/>schema-constrained extraction"]
         SAN["Sanity layer<br/>repairs impossible values, standardises names"]
         ENG["Deterministic analysis engine<br/>claims · QUID · portions · Atwater · price · score"]
-        CAT["Catalog APIs<br/>search · suggestions · shelf alternatives · rename"]
+        CAT["Catalog APIs<br/>search · barcode · alternatives · rename · reports · translate"]
+        RL["Rate limiter<br/>protects free Gemini quota"]
     end
 
     subgraph Data["Data"]
         PG[("Postgres (Neon)<br/>shared product catalog")]
         KB["Knowledge base<br/>flagged additives · desi alternatives · recipes"]
+        OFF[("Open Food Facts<br/>barcode database")]
     end
 
-    UP --> AN --> GEM -->|LabelExtraction| SAN --> ENG -->|ProductAnalysis| UP
+    UP --> RL --> AN --> GEM -->|LabelExtraction| SAN --> ENG -->|ProductAnalysis| UP
     ENG <--> KB
     AN -->|save once| PG
     SR --> CAT <--> PG
+    CAT -->|unknown barcode| OFF
 ```
 
 1. **Gemini only transcribes.** It returns a strict Pydantic `LabelExtraction` (brand, product, variant, category, nutrition per serving *and* per 100g, ingredients with %, claims, MRP).
@@ -64,7 +75,11 @@ flowchart TD
 
 ## Engineering decisions worth talking about
 
-- **AI for perception, code for judgement.** The LLM never computes a number the user sees. That removes hallucinated maths and makes the core logic testable without network calls (54 Pytest tests).
+- **AI for perception, code for judgement.** The LLM never computes a number the user sees. That removes hallucinated maths and makes the core logic testable without network calls (63 Pytest tests).
+- **A score that can't be gamed, and explains itself.** Brands shrink the "serving" to make numbers look small, so the score is computed per 100g using UK FSA traffic-light bands (close to FSSAI's proposed HFSS limits). Every adjustment is returned as a reason ("−2 high sodium 1,232mg/100g"), and the one-line verdict is generated from the same reasons, so it can never contradict the score.
+- **Cheapest data source first.** Barcode lookup goes: own catalog (free, instant) → Open Food Facts (free API, no AI) → photos + Gemini (slow, uses quota). Each step saves its result, so every product costs at most one AI call, ever.
+- **Protecting a free-tier AI budget.** Endpoints that spend Gemini quota have per-client sliding-window rate limits. The client IP is read from the right-most `X-Forwarded-For` entry, which the proxy adds, because left-most entries can be spoofed. Translations are cached per product, so each one costs one call, ever.
+- **Translation that can't change the facts.** Only prose is sent for Hindi translation, and it's mapped back by key. Scores, numbers and flags never pass through the model.
 - **Self-healing extraction.** Vision models sometimes read the wrong column of a nutrition table. Physical impossibility checks (macros heavier than the serving, more than 9 kcal per gram) detect it, and the values are rebuilt from per-100g data. A missing pack weight is derived from servings × serving size.
 - **A shared catalog that respects what is shared.** The **MRP** is printed on every Indian pack by law, so it is a fact about the product and is stored. **What you paid** depends on shop, city and offers, so it is used only for your own view and never saved.
 - **Fixing AI mistakes without accounts.** When a scan finishes, the server returns a random **edit token** that only the scanner's browser keeps. Renaming requires that token (compared in constant time), so whoever scanned a product can fix a misread name ("Nenimems" → "Nenimemi's"), but strangers can't vandalise the shared catalog.
@@ -79,10 +94,11 @@ flowchart TD
 
 | Layer | Tech | Hosting (all free tier) |
 |---|---|---|
-| Frontend | Next.js 15, React 19, TypeScript, Tailwind CSS 4 | Vercel |
+| Frontend | Next.js 15, React 19, TypeScript, Tailwind CSS 4, `next/og` preview images, browser BarcodeDetector | Vercel |
 | Backend | Python 3.12, FastAPI, Pydantic v2, SQLModel / SQLAlchemy | Render |
 | AI | Google GenAI SDK: Gemini Flash multimodal, structured output | Gemini API |
 | Database | Postgres (serverless) in production, SQLite locally | Neon |
+| Open data | Open Food Facts API (ODbL) for barcode lookups | Free |
 | Quality | Pytest (unit + API tests with an in-memory DB) | — |
 
 ### API
@@ -93,6 +109,10 @@ flowchart TD
 | `GET` | `/api/products/search?q=` | Multi-word search over brand, product and variant (latest audit per product) |
 | `GET` | `/api/products/suggestions` | Recently scanned unique products (search dropdown) |
 | `GET` | `/api/products/{id}/alternatives` | Shelf ranking and healthier products in the same sub-category |
+| `GET` | `/api/products/barcode/{code}` | Catalog → Open Food Facts → "photograph the label" |
+| `POST` | `/api/translate` | Audit prose in Hindi (cached per product) |
+| `POST` | `/api/history/{id}/report` | Flag an audit as wrong |
+| `GET` | `/api/reports` | Review queue (needs `REPORTS_ADMIN_KEY`) |
 | `GET` | `/api/history` · `/api/history/{id}` | Past scans · full saved audit |
 | `PATCH` | `/api/history/{id}` | Fix brand / product / variant (requires the scanner's `edit_token`) |
 | `DELETE` | `/api/history/{id}` | Remove a scan |
@@ -134,10 +154,18 @@ Free hosts like Render wipe the disk on every deploy, so production uses Neon:
 2. Add it as `DATABASE_URL` in Render → **Environment**, then redeploy.
 3. Startup logs `Database initialized (hosted Postgres via DATABASE_URL)`. Tables and new columns are created automatically.
 
+### Optional settings
+| Variable | Default | Purpose |
+|---|---|---|
+| `RATE_LIMIT_SCANS_PER_HOUR` | 15 | Label scans per client per hour (0 = off) |
+| `RATE_LIMIT_TRANSLATIONS_PER_HOUR` | 30 | Uncached Hindi translations per client per hour |
+| `OFF_USER_AGENT` | `LabelPadho/1.0` | Identify your app to Open Food Facts, e.g. `LabelPadho/1.0 (you@example.com)` |
+| `REPORTS_ADMIN_KEY` | unset | Enables `GET /api/reports` (send it as the `X-Admin-Key` header) |
+
 ---
 
 ## Roadmap
-- **Barcode scanning** for exact product matching and instant lookups
+- **Accounts** so renames and reports become reviewed suggestions, and profiles sync across devices
 - **Crowd-sourced price reports** (price, city, date) for typical-price ranges
-- **Accounts** so renames become reviewed suggestions instead of token-based edits
-- **Per-100g health scoring** so small stated servings can't flatter a product
+- **More languages** (Tamil, Bengali, Marathi): the translation layer is already language-agnostic
+- **Redis-backed rate limits** when the backend runs on more than one instance
