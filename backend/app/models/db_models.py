@@ -32,7 +32,12 @@ class ProductScan(SQLModel, table=True):
     # Core Identifiers
     product_name: str = Field(index=True)
     product_category: Optional[str] = Field(default=None, index=True)
+    sub_category: Optional[str] = Field(default=None, index=True)
     brand: Optional[str] = Field(default=None)
+    variant: Optional[str] = Field(default=None)
+    # MRP printed on the pack (a product fact, shared). What a user paid is never stored.
+    mrp_inr: Optional[float] = Field(default=None)
+    net_weight_g: Optional[float] = Field(default=None)
     price_inr: Optional[float] = Field(default=None)
     health_score: Optional[int] = Field(default=None)
     one_line_summary: str = Field(default="")
@@ -55,6 +60,10 @@ class ProductScan(SQLModel, table=True):
     # This allows restoring the complete detailed audit without re-running AI
     full_analysis_json: str = Field(default="{}")
 
+    # Secret handed only to the person who scanned, so they (and nobody else)
+    # can correct a misread product name. Never returned by read endpoints.
+    edit_token: Optional[str] = Field(default=None)
+
 
 class ProductScanRead(SQLModel):
     """Lightweight schema returned for list-view history cards."""
@@ -63,7 +72,11 @@ class ProductScanRead(SQLModel):
     created_at: datetime
     product_name: str
     product_category: Optional[str] = None
+    sub_category: Optional[str] = None
     brand: Optional[str] = None
+    variant: Optional[str] = None
+    mrp_inr: Optional[float] = None
+    net_weight_g: Optional[float] = None
     price_inr: Optional[float] = None
     health_score: Optional[int] = None
     one_line_summary: str

@@ -21,7 +21,9 @@ import {
   Clock,
   Utensils,
   Search,
-  X
+  X,
+  Pencil,
+  Trophy
 } from "lucide-react";
 
 interface NutritionInfo {
@@ -88,6 +90,10 @@ interface EducationalNote {
 
 interface PriceAnalysis {
   price_inr: number;
+  price_source?: "mrp" | "paid";
+  mrp_inr?: number | null;
+  price_paid_inr?: number | null;
+  discount_pct?: number | null;
   price_per_g_protein?: number;
   value_verdict: string;
 }
@@ -135,9 +141,14 @@ interface HomemadeRecipe {
 }
 
 interface ProductAnalysis {
+  scan_id?: number | null;
   extraction: {
     product_name?: string;
     brand?: string;
+    variant?: string | null;
+    sub_category?: string | null;
+    mrp_inr?: number | null;
+    net_weight_g?: number | null;
     product_category?: string;
     category_reasoning?: string;
     nutrition_per_serving?: NutritionInfo;
@@ -146,6 +157,8 @@ interface ProductAnalysis {
   };
   product_category?: string;
   category_display_name?: string;
+  sub_category?: string | null;
+  sub_category_display_name?: string | null;
   health_score?: number;
   one_line_summary: string;
   detailed_summary: string;
@@ -165,7 +178,10 @@ interface HistoryCard {
   created_at: string;
   product_name: string;
   product_category?: string;
+  sub_category?: string | null;
   brand?: string;
+  variant?: string | null;
+  mrp_inr?: number | null;
   price_inr?: number;
   health_score?: number;
   one_line_summary: string;
@@ -178,10 +194,47 @@ interface HistoryCard {
   has_calorie_discrepancy: boolean;
 }
 
+interface AlternativesResult {
+  scope: "sub_category" | "category";
+  scope_label: string;
+  rank?: number | null;
+  total: number;
+  better: HistoryCard[];
+}
+
+// "Britannia Bourbon (Chocolate Cream)" without repeating the brand or variant
+function productTitle(brand?: string | null, name?: string | null, variant?: string | null): string {
+  let title = name || "Packaged Food Product";
+  if (brand && !title.toLowerCase().startsWith(brand.toLowerCase())) title = `${brand} ${title}`;
+  if (variant && !title.toLowerCase().includes(variant.toLowerCase())) title = `${title} (${variant})`;
+  return title;
+}
+
+// Edit tokens prove "I scanned this" so only the scanner can fix a misread name.
+// Kept in this browser only.
+const EDIT_TOKENS_KEY = "labelpadho_edit_tokens";
+function loadEditTokens(): Record<number, string> {
+  try {
+    return JSON.parse(localStorage.getItem(EDIT_TOKENS_KEY) || "{}");
+  } catch {
+    return {};
+  }
+}
+function saveEditToken(scanId: number, token: string) {
+  try {
+    const tokens = loadEditTokens();
+    tokens[scanId] = token;
+    localStorage.setItem(EDIT_TOKENS_KEY, JSON.stringify(tokens));
+  } catch {
+    /* storage unavailable: rename simply won't survive a reload */
+  }
+}
+
 // In Next.js, env vars prefixed with NEXT_PUBLIC_ are available in the browser.
 // Locally: falls back to localhost:8000
 // On Vercel: set NEXT_PUBLIC_API_URL to your Render backend URL
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const MAX_CLAIM_PHOTOS = 4;
 
 // Pre-computed instant demo audit for recruiters or quick testing
 const DEMO_AUDIT: ProductAnalysis = {
@@ -1230,10 +1283,10 @@ export default function Home() {
   // Upload inputs
   const [nutritionFile, setNutritionFile] = useState<File | null>(null);
   const [ingredientsFile, setIngredientsFile] = useState<File | null>(null);
-  const [frontFile, setFrontFile] = useState<File | null>(null);
+  // Front of pack + any other panels with claims (up to MAX_CLAIM_PHOTOS)
+  const [frontFiles, setFrontFiles] = useState<{ file: File; preview: string }[]>([]);
   const [nutritionPreview, setNutritionPreview] = useState<string | null>(null);
   const [ingredientsPreview, setIngredientsPreview] = useState<string | null>(null);
-  const [frontPreview, setFrontPreview] = useState<string | null>(null);
   const [productName, setProductName] = useState("");
   const [price, setPrice] = useState("");
   const [expectedConsumption, setExpectedConsumption] = useState("");
@@ -1256,13 +1309,21 @@ export default function Home() {
     }
   };
 
-  const handleFrontChange = (file: File | null) => {
-    setFrontFile(file);
-    if (file) {
-      setFrontPreview(URL.createObjectURL(file));
-    } else {
-      setFrontPreview(null);
-    }
+  const addFrontFiles = (files: FileList | null) => {
+    if (!files) return;
+    setFrontFiles((prev) =>
+      [...prev, ...Array.from(files).map((file) => ({ file, preview: URL.createObjectURL(file) }))].slice(
+        0,
+        MAX_CLAIM_PHOTOS
+      )
+    );
+  };
+
+  const removeFrontFile = (index: number) => {
+    setFrontFiles((prev) => {
+      URL.revokeObjectURL(prev[index].preview);
+      return prev.filter((_, i) => i !== index);
+    });
   };
   
   // Loading & states
@@ -1318,6 +1379,89 @@ export default function Home() {
   const [searchResults, setSearchResults] = useState<HistoryCard[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchDone, setSearchDone] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [suggestions, setSuggestions] = useState<HistoryCard[]>([]);
+  const searchBoxRef = React.useRef<HTMLDivElement>(null);
+
+  // Latest products in the shared catalog, shown before the user types
+  useEffect(() => {
+    fetch(`${API_BASE}/api/products/suggestions?limit=6`)
+      .then((res) => (res.ok ? res.json() : []))
+      .then(setSuggestions)
+      .catch(() => setSuggestions([]));
+  }, []);
+
+  // Close the dropdown when clicking anywhere else
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      if (searchBoxRef.current && !searchBoxRef.current.contains(e.target as Node)) setSearchOpen(false);
+    };
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, []);
+
+  const q = searchQuery.trim().toLowerCase();
+  const matchingDemos = DEMO_AUDITS.filter(({ analysis: a }) => {
+    if (!q) return true;
+    const hay = `${a.extraction.brand || ""} ${a.extraction.product_name || ""}`.toLowerCase();
+    return q.split(/\s+/).every((word) => hay.includes(word));
+  });
+
+  // Rename (only the person who just scanned holds the token)
+  const [editTokens, setEditTokens] = useState<Record<number, string>>({});
+  useEffect(() => setEditTokens(loadEditTokens()), []);
+  const [renaming, setRenaming] = useState(false);
+  const [renameForm, setRenameForm] = useState({ brand: "", product_name: "", variant: "" });
+  const [renameError, setRenameError] = useState<string | null>(null);
+
+  const startRename = () => {
+    if (!analysis) return;
+    setRenameForm({
+      brand: analysis.extraction.brand || "",
+      product_name: analysis.extraction.product_name || "",
+      variant: analysis.extraction.variant || "",
+    });
+    setRenameError(null);
+    setRenaming(true);
+  };
+
+  const saveRename = async () => {
+    if (!analysis?.scan_id) return;
+    const token = editTokens[analysis.scan_id];
+    if (!renameForm.product_name.trim()) {
+      setRenameError("Product name can't be empty.");
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE}/api/history/${analysis.scan_id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ edit_token: token, ...renameForm }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Rename failed");
+      setAnalysis({
+        ...analysis,
+        extraction: { ...analysis.extraction, brand: data.brand, product_name: data.product_name, variant: data.variant },
+      });
+      setSuggestions((prev) => prev.map((p) => (p.id === data.id ? { ...p, ...data } : p)));
+      setRenaming(false);
+    } catch (err: any) {
+      setRenameError(err.message || "Rename failed");
+    }
+  };
+
+  // Shelf leaderboard: healthier products on the same shelf
+  const [alternatives, setAlternatives] = useState<AlternativesResult | null>(null);
+  useEffect(() => {
+    setAlternatives(null);
+    setRenaming(false);
+    if (!analysis?.scan_id) return;
+    fetch(`${API_BASE}/api/products/${analysis.scan_id}/alternatives`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then(setAlternatives)
+      .catch(() => setAlternatives(null));
+  }, [analysis?.scan_id]);
 
   useEffect(() => {
     const q = searchQuery.trim();
@@ -1367,9 +1511,9 @@ export default function Home() {
     }, 100);
   };
 
-  const loadRandomDemoAudit = () => {
-    const randomDemo = DEMO_AUDITS[Math.floor(Math.random() * DEMO_AUDITS.length)];
-    loadDemoAudit(randomDemo.analysis);
+  const openFromSearch = (open: () => void) => {
+    setSearchOpen(false);
+    open();
   };
 
   const viewPastScan = async (scanId: number) => {
@@ -1416,7 +1560,7 @@ export default function Home() {
     const formData = new FormData();
     formData.append("nutrition_label", nutritionFile);
     if (ingredientsFile) formData.append("ingredients_label", ingredientsFile);
-    if (frontFile) formData.append("front_package", frontFile);
+    frontFiles.forEach(({ file }) => formData.append("front_package", file));
     if (productName.trim()) formData.append("product_name", productName.trim());
     if (price.trim()) formData.append("price", price.trim());
     if (expectedConsumption.trim()) formData.append("expected_consumption_g", expectedConsumption.trim());
@@ -1433,6 +1577,10 @@ export default function Home() {
       }
 
       setAnalysis(data.analysis);
+      if (data.scan_id && data.edit_token) {
+        saveEditToken(data.scan_id, data.edit_token);
+        setEditTokens((prev) => ({ ...prev, [data.scan_id]: data.edit_token }));
+      }
     } catch (err: any) {
       setError(err.message || "Failed to connect to backend server.");
     } finally {
@@ -1482,90 +1630,130 @@ export default function Home() {
           </button>
         </div>
 
-        {/* Instant Recruiter Demo */}
-        <div className="mt-5">
-          <button type="button" onClick={loadRandomDemoAudit} className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-semibold rounded-md border border-emerald-200/80 text-xs transition cursor-pointer">
-            Instant demo audit
-          </button>
-          <p className="text-[11px] text-slate-500 mt-1.5">Randomly loads one of six familiar Indian shelf products.</p>
-        </div>
       </header>
 
       {/* SCANNER VIEW */}
       {activeTab === "scan" && (
         <>
-          {/* Product Search — skip the photo upload if this product was audited before */}
+          {/* Product Search — open any audit from the shared catalog (or a sample) without uploading */}
           <section className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-6 mb-6">
             <label htmlFor="product-search" className="block text-sm font-semibold text-slate-900">
               Already audited? Search instead of uploading
             </label>
             <p className="text-xs text-slate-500 mt-0.5 mb-3">
-              Every scanned product is saved. Find it by name or brand to open its audit instantly.
+              Every product anyone scans is saved to a shared catalog. Open its audit instantly, no photos needed.
             </p>
-            <div className="relative">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <div className="relative" ref={searchBoxRef}>
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-[1.4rem] -translate-y-1/2 pointer-events-none" />
               <input
                 id="product-search"
                 type="text"
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="e.g. Maggi, Amul whey, Britannia..."
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setSearchOpen(true);
+                }}
+                onFocus={() => setSearchOpen(true)}
+                onKeyDown={(e) => e.key === "Escape" && setSearchOpen(false)}
+                placeholder="Try Britannia Bourbon, Bhujia, Ragi Chips..."
                 autoComplete="off"
+                role="combobox"
+                aria-expanded={searchOpen}
+                aria-controls="product-search-results"
                 className="w-full pl-9 pr-9 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-400"
               />
               {searchQuery && (
                 <button
                   type="button"
                   onClick={() => setSearchQuery("")}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-700 cursor-pointer"
+                  className="absolute right-2 top-[1.4rem] -translate-y-1/2 p-1 text-slate-400 hover:text-slate-700 cursor-pointer"
                   aria-label="Clear search"
                 >
                   <X className="w-4 h-4" />
                 </button>
               )}
-            </div>
 
-            {searchQuery.trim() && (
-              <div className="mt-3">
-                {searchLoading && searchResults.length === 0 ? (
-                  <p className="text-xs text-slate-500 py-2">Searching saved products...</p>
-                ) : searchResults.length > 0 ? (
-                  <ul className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden">
-                    {searchResults.map((item) => (
-                      <li key={item.id}>
+              {searchOpen && (
+                <div
+                  id="product-search-results"
+                  className="absolute z-20 left-0 right-0 mt-2 bg-white border border-slate-200 rounded-xl shadow-lg max-h-[26rem] overflow-y-auto"
+                >
+                  {(() => {
+                    const catalogItems = q ? searchResults : suggestions;
+                    const renderCatalogItem = (item: HistoryCard) => (
+                      <li key={`scan-${item.id}`}>
                         <button
                           type="button"
-                          onClick={() => viewPastScan(item.id)}
-                          className="w-full text-left px-4 py-3 hover:bg-emerald-50/60 transition flex items-center justify-between gap-3 cursor-pointer"
+                          onClick={() => openFromSearch(() => viewPastScan(item.id))}
+                          className="w-full text-left px-4 py-2.5 hover:bg-emerald-50/60 transition flex items-center justify-between gap-3 cursor-pointer"
                         >
                           <div className="min-w-0">
                             <p className="text-sm font-semibold text-slate-900 truncate">
-                              {item.product_name}
-                              {item.brand && (
-                                <span className="font-normal text-slate-500"> · {item.brand}</span>
-                              )}
+                              {productTitle(item.brand, item.product_name, item.variant)}
                             </p>
                             <p className="text-xs text-slate-500 truncate">{item.one_line_summary}</p>
                           </div>
-                          <div className="flex items-center gap-2 shrink-0">
-                            {item.health_score != null && (
-                              <span className="text-xs font-extrabold px-2 py-0.5 rounded-md bg-slate-100 text-slate-800">
-                                {item.health_score}/10
-                              </span>
-                            )}
-                            <ArrowRight className="w-4 h-4 text-emerald-600" />
-                          </div>
+                          {item.health_score != null && (
+                            <span className="text-xs font-extrabold px-2 py-0.5 rounded-md bg-slate-100 text-slate-800 shrink-0">
+                              {item.health_score}/10
+                            </span>
+                          )}
                         </button>
                       </li>
-                    ))}
-                  </ul>
-                ) : searchDone ? (
-                  <p className="text-xs text-slate-500 py-2">
-                    No saved audit for &ldquo;{searchQuery.trim()}&rdquo; yet. Upload its label below and it will be searchable next time.
-                  </p>
-                ) : null}
-              </div>
-            )}
+                    );
+                    return (
+                      <>
+                        <p className="px-4 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                          {q ? "From the shared catalog" : "Recently scanned by the community"}
+                        </p>
+                        {q && searchLoading && searchResults.length === 0 ? (
+                          <p className="px-4 py-2 text-xs text-slate-500">Searching...</p>
+                        ) : catalogItems.length > 0 ? (
+                          <ul>{catalogItems.map(renderCatalogItem)}</ul>
+                        ) : (
+                          <p className="px-4 py-2 text-xs text-slate-500">
+                            {q && searchDone
+                              ? `No saved audit for "${searchQuery.trim()}" yet. Upload its label below and it will be searchable for everyone.`
+                              : !q
+                              ? "Nothing scanned yet. Be the first!"
+                              : null}
+                          </p>
+                        )}
+
+                        {matchingDemos.length > 0 && (
+                          <>
+                            <p className="px-4 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-t border-slate-100">
+                              Sample audits
+                            </p>
+                            <ul className="pb-2">
+                              {matchingDemos.map(({ label, analysis: demo }) => (
+                                <li key={`demo-${label}`}>
+                                  <button
+                                    type="button"
+                                    onClick={() => openFromSearch(() => loadDemoAudit(demo))}
+                                    className="w-full text-left px-4 py-2.5 hover:bg-emerald-50/60 transition flex items-center justify-between gap-3 cursor-pointer"
+                                  >
+                                    <div className="min-w-0">
+                                      <p className="text-sm font-semibold text-slate-900 truncate">
+                                        {productTitle(demo.extraction.brand, demo.extraction.product_name, demo.extraction.variant)}
+                                      </p>
+                                      <p className="text-xs text-slate-500 truncate">{demo.one_line_summary}</p>
+                                    </div>
+                                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 shrink-0">
+                                      Sample
+                                    </span>
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                          </>
+                        )}
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
+            </div>
           </section>
 
           {/* Upload Form */}
@@ -1651,39 +1839,67 @@ export default function Home() {
                   )}
                 </div>
 
-                {/* 3. Front of Pack (Optional) */}
+                {/* 3. Front of Pack + other claim panels (Optional, multiple) */}
                 <div className="border-2 border-dashed border-slate-300 rounded-xl p-4 text-center bg-white hover:border-emerald-400 hover:bg-emerald-50/30 transition">
-                  {frontPreview ? (
+                  {frontFiles.length > 0 ? (
                     <div>
-                      <img
-                        src={frontPreview}
-                        alt="Front packaging preview"
-                        className="w-full h-32 object-contain rounded-lg bg-slate-50 border border-slate-200 mb-2"
-                      />
+                      <div className="grid grid-cols-2 gap-2 mb-2">
+                        {frontFiles.map(({ file, preview }, i) => (
+                          <div key={preview} className="relative">
+                            <img
+                              src={preview}
+                              alt={`Claim photo ${i + 1}: ${file.name}`}
+                              className="w-full h-20 object-contain rounded-lg bg-slate-50 border border-slate-200"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => removeFrontFile(i)}
+                              className="absolute -top-1.5 -right-1.5 bg-white border border-slate-300 rounded-full p-0.5 text-slate-500 hover:text-red-600 cursor-pointer shadow-sm"
+                              aria-label={`Remove ${file.name}`}
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
                       <div className="flex items-center justify-between px-1">
-                        <span className="text-[11px] font-semibold text-amber-800 truncate max-w-[140px]">
-                          ✓ {frontFile?.name}
+                        <span className="text-[11px] font-semibold text-amber-800">
+                          ✓ {frontFiles.length} of {MAX_CLAIM_PHOTOS} photos
                         </span>
-                        <button
-                          type="button"
-                          onClick={() => handleFrontChange(null)}
-                          className="text-[11px] text-red-600 font-semibold hover:underline cursor-pointer"
-                        >
-                          Remove
-                        </button>
+                        {frontFiles.length < MAX_CLAIM_PHOTOS && (
+                          <label className="text-[11px] text-emerald-700 font-semibold hover:underline cursor-pointer">
+                            + Add another
+                            <input
+                              type="file"
+                              accept="image/*,.heic,.heif"
+                              multiple
+                              className="hidden"
+                              onChange={(e) => {
+                                addFrontFiles(e.target.files);
+                                e.target.value = "";
+                              }}
+                            />
+                          </label>
+                        )}
                       </div>
                     </div>
                   ) : (
                     <>
                       <Upload className="w-8 h-8 text-slate-500 mx-auto mb-2" />
                       <label className="block text-sm font-semibold text-slate-900 mb-1">
-                        3. Front of Pack
+                        3. Front &amp; Claims
                       </label>
-                      <p className="text-xs text-slate-500 mb-3">Verifies 'Multigrain' / 'High Protein'</p>
+                      <p className="text-xs text-slate-500 mb-3">
+                        Front of pack + any panel with claims (up to {MAX_CLAIM_PHOTOS})
+                      </p>
                       <input
                         type="file"
                         accept="image/*,.heic,.heif"
-                        onChange={(e) => handleFrontChange(e.target.files?.[0] || null)}
+                        multiple
+                        onChange={(e) => {
+                          addFrontFiles(e.target.files);
+                          e.target.value = "";
+                        }}
                         className="text-xs text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-amber-600 file:text-white hover:file:bg-amber-700 cursor-pointer w-full"
                       />
                     </>
@@ -1721,15 +1937,17 @@ export default function Home() {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                    Product Price <span className="normal-case">(₹ INR - Optional)</span>
+                    Price You Paid <span className="normal-case">(₹ - Optional)</span>
                   </label>
                   <input
                     type="number"
+                    min="1"
                     value={price}
                     onChange={(e) => setPrice(e.target.value)}
-                    placeholder="e.g. 50"
+                    placeholder="e.g. 45"
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   />
+                  <p className="text-[11px] text-slate-500 mt-1">MRP is read from the pack automatically.</p>
                 </div>
               </div>
 
@@ -1773,12 +1991,68 @@ export default function Home() {
                     {analysis.category_display_name && (
                       <span className="text-xs font-bold uppercase tracking-wider text-indigo-700 bg-indigo-50 border border-indigo-200/50 px-2.5 py-1 rounded-md">
                         🏷️ {analysis.category_display_name}
+                        {analysis.sub_category_display_name && ` · ${analysis.sub_category_display_name}`}
                       </span>
                     )}
                   </div>
-                  <h2 className="text-2xl font-bold text-slate-900 mt-1">
-                    {analysis.extraction.product_name || "Packaged Food Product"}
-                  </h2>
+                  {renaming ? (
+                    <div className="mt-2 space-y-2 max-w-xl">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        {(
+                          [
+                            ["brand", "Brand / company", "e.g. Gimi Gimi"],
+                            ["product_name", "Product name *", "e.g. Sim Sim Chikki"],
+                            ["variant", "Flavour / variant", "e.g. Jaggery"],
+                          ] as const
+                        ).map(([key, label, placeholder]) => (
+                          <label key={key} className="text-[11px] font-semibold text-slate-600">
+                            {label}
+                            <input
+                              type="text"
+                              value={renameForm[key]}
+                              onChange={(e) => setRenameForm({ ...renameForm, [key]: e.target.value })}
+                              placeholder={placeholder}
+                              className="mt-1 w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-sm font-normal text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                            />
+                          </label>
+                        ))}
+                      </div>
+                      {renameError && <p className="text-xs text-red-600">{renameError}</p>}
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={saveRename}
+                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg cursor-pointer"
+                        >
+                          Save name
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setRenaming(false)}
+                          className="px-3 py-1.5 bg-white border border-slate-300 text-slate-700 text-xs font-semibold rounded-lg cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 mt-1 flex-wrap">
+                      <h2 className="text-2xl font-bold text-slate-900">
+                        {productTitle(analysis.extraction.brand, analysis.extraction.product_name, analysis.extraction.variant)}
+                      </h2>
+                      {analysis.scan_id && editTokens[analysis.scan_id] && (
+                        <button
+                          type="button"
+                          onClick={startRename}
+                          className="text-xs font-semibold text-slate-500 hover:text-emerald-700 flex items-center gap-1 cursor-pointer"
+                          title="Only you can rename this, because you scanned it"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                          Name wrong? Fix it
+                        </button>
+                      )}
+                    </div>
+                  )}
                   <p className="text-slate-600 mt-1 max-w-xl text-sm">
                     {analysis.one_line_summary}
                   </p>
@@ -1792,6 +2066,57 @@ export default function Home() {
                   </div>
                 )}
               </div>
+
+              {/* Shelf leaderboard: healthier options on the same shelf, from the shared catalog */}
+              {alternatives && alternatives.total > 0 && (
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                  <div className="flex items-start justify-between gap-3 flex-wrap mb-3">
+                    <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                      <Trophy className="w-5 h-5 text-amber-500" />
+                      Better choices in {alternatives.scope_label}
+                    </h3>
+                    {alternatives.rank && alternatives.total > 1 && (
+                      <span className="text-xs font-semibold px-2.5 py-1 rounded-md bg-slate-100 text-slate-700">
+                        Ranked #{alternatives.rank} of {alternatives.total} on this shelf
+                      </span>
+                    )}
+                  </div>
+                  {alternatives.better.length > 0 ? (
+                    <ul className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden">
+                      {alternatives.better.map((item) => (
+                        <li key={item.id}>
+                          <button
+                            type="button"
+                            onClick={() => viewPastScan(item.id)}
+                            className="w-full text-left px-4 py-3 hover:bg-emerald-50/60 transition flex items-center justify-between gap-3 cursor-pointer"
+                          >
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-slate-900 truncate">
+                                {productTitle(item.brand, item.product_name, item.variant)}
+                              </p>
+                              <p className="text-xs text-slate-500 truncate">{item.one_line_summary}</p>
+                            </div>
+                            <span className="text-xs font-extrabold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 shrink-0">
+                              {item.health_score}/10
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-sm text-slate-600">
+                      {alternatives.total > 1
+                        ? "This is the best-scoring product on this shelf so far."
+                        : "This is the first product scanned on this shelf. Scan similar products to compare."}
+                    </p>
+                  )}
+                  {alternatives.scope === "category" && (
+                    <p className="text-[11px] text-slate-500 mt-2">
+                      No other products on the exact same shelf yet, so this compares across the wider category.
+                    </p>
+                  )}
+                </div>
+              )}
 
               {/* 100% Ingredient Distribution & Hero Trap Pie Chart */}
               {analysis.ingredient_breakdown && (
@@ -1944,6 +2269,25 @@ export default function Home() {
                       Price-per-Gram Value Check
                     </h3>
                     <div className="p-4 bg-emerald-50/40 rounded-xl border border-emerald-100 space-y-2">
+                      {analysis.price_analysis.mrp_inr && (
+                        <div className="flex justify-between items-center text-sm">
+                          <span className="text-slate-600">MRP (printed on pack):</span>
+                          <span className="font-bold text-slate-900">₹{analysis.price_analysis.mrp_inr}</span>
+                        </div>
+                      )}
+                      {analysis.price_analysis.price_paid_inr && (
+                        <div className="flex justify-between items-center text-sm">
+                          <span className="text-slate-600">You paid:</span>
+                          <span className="font-bold text-slate-900">
+                            ₹{analysis.price_analysis.price_paid_inr}
+                            {analysis.price_analysis.discount_pct ? (
+                              <span className="ml-1.5 text-xs font-semibold text-emerald-700">
+                                ({analysis.price_analysis.discount_pct}% below MRP)
+                              </span>
+                            ) : null}
+                          </span>
+                        </div>
+                      )}
                       {analysis.price_analysis.price_per_g_protein && (
                         <div className="flex justify-between items-center text-sm">
                           <span className="text-slate-600">Cost per gram of protein:</span>
@@ -2075,7 +2419,7 @@ export default function Home() {
                   <div>
                     <div className="flex items-start justify-between gap-2">
                       <div>
-                        <h3 className="font-bold text-slate-900 text-base">{item.product_name}</h3>
+                        <h3 className="font-bold text-slate-900 text-base">{productTitle(item.brand, item.product_name, item.variant)}</h3>
                         <p className="text-xs text-slate-500 mt-0.5">
                           {new Date(item.created_at).toLocaleDateString("en-IN", {
                             day: "numeric",

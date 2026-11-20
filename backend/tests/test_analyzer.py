@@ -727,7 +727,7 @@ def test_per_100g_values_filed_as_per_serving_are_rescaled(analyzer):
     assert portion.added_sugar_g < 35
     assert portion.sodium_mg == pytest.approx(147, abs=2)
     # Packet weight derived from 2 x 16.7g; no "None" in the text
-    assert reality.package_weight_g == pytest.approx(33.4)
+    assert reality.package_weight_g == 33
     assert "None" not in reality.realistic_consumption
     assert "16.7g (16.7 g)" not in reality.realistic_consumption
 

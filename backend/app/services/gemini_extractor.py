@@ -144,6 +144,8 @@ IMPORTANT GUIDELINES:
     - 'condiment_sauce': Ketchup, mayo, dips, dressings, jams
     - 'general_packaged': Any food not fitting the above
     Provide a concise `category_reasoning` explaining your classification.
+    Also set `sub_category` to the single best-fitting key listed in its field description
+    (e.g. a sweet biscuit → 'biscuit_cookie', bhujia → 'namkeen_bhujia', ketchup → 'ketchup_sauce').
 11. DYNAMIC MARKETING CLAIM AUDIT (`raw_claims_audit`):
     For EVERY marketing claim visible on the packaging (e.g. "Loaded with Nuts", "No Added Maida", "Power of Protein & Fibre", "Source of Calcium", "100% Real", "Guilt Free"):
     Cross-examine it against the actual ingredients list and nutrition numbers:
@@ -151,6 +153,13 @@ IMPORTANT GUIDELINES:
     - If claim says "No Added Maida", check if refined starches, maltodextrin, or refined flours are substituted.
     - If claim says "Protein/Fibre Rich", check actual grams in the nutrition table.
     - Assign status ('verified', 'misleading', or 'debunked') with a concise 1-sentence reality check.
+12. NAME, BRAND AND VARIANT — split them into separate fields:
+    - `brand`: the company/brand only (e.g. 'Britannia', 'Haldiram's').
+    - `product_name`: the product itself, without brand or flavour (e.g. 'Bourbon', 'Aloo Bhujia', 'Ragi Chips').
+    - `variant`: the flavour/variant if printed (e.g. 'Chocolate Cream', 'Peri Peri'), else null.
+    Read these from the front-of-pack photos when available; the logo usually shows the brand.
+13. MRP: extract the printed "MRP ₹ ... (incl. of all taxes)" as `mrp_inr` (a number). Null if not visible.
+    Also capture the net quantity in grams (or ml for liquids) as `net_weight_g`.
 """
 
 

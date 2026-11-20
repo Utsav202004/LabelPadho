@@ -51,6 +51,43 @@ class ProductCategory(str, Enum):
     GENERAL_PACKAGED = "general_packaged"  # General food items with no specific category
 
 
+# Narrower shelf groups inside each category, so comparisons are fair
+# (an Oreo should be compared with other biscuits, not with rasgulla).
+SUB_CATEGORIES: dict[str, dict[str, str]] = {
+    "protein_fitness": {
+        "protein_bar": "Protein Bars", "protein_powder": "Protein Powders",
+        "nut_butter": "Nut Butters", "protein_snack": "Protein Snacks",
+    },
+    "staple_grain": {
+        "atta_flour": "Atta & Flours", "rice": "Rice", "oats": "Oats & Muesli",
+        "breakfast_cereal": "Breakfast Cereals", "bread": "Breads", "pasta_noodles": "Pasta & Vermicelli",
+    },
+    "dessert_sweet": {
+        "biscuit_cookie": "Biscuits & Cookies", "chocolate": "Chocolates", "cake_pastry": "Cakes & Pastries",
+        "mithai": "Indian Sweets", "ice_cream": "Ice Creams & Frozen Desserts", "candy": "Candies & Toffees",
+    },
+    "savory_snack": {
+        "chips_crisps": "Chips & Crisps", "namkeen_bhujia": "Namkeen & Bhujia", "popcorn": "Popcorn",
+        "instant_noodles": "Instant Noodles", "crackers": "Crackers & Puffs", "nuts_seeds": "Roasted Nuts & Seeds",
+    },
+    "beverage_juice": {
+        "fruit_juice": "Fruit Juices & Drinks", "health_drink": "Health Drink Mixes",
+    },
+    "beverage_soda": {
+        "soft_drink": "Soft Drinks", "energy_drink": "Energy Drinks", "flavoured_water": "Flavoured Water & Soda",
+    },
+    "dairy_dairy_alt": {
+        "milk": "Milk", "flavoured_milk": "Flavoured Milk & Lassi", "curd_yogurt": "Curd & Yogurt",
+        "paneer_cheese": "Paneer & Cheese", "plant_milk": "Plant-based Milk",
+    },
+    "condiment_sauce": {
+        "ketchup_sauce": "Ketchups & Sauces", "mayo_dressing": "Mayo & Dressings",
+        "jam_spread": "Jams & Spreads", "pickle_chutney": "Pickles & Chutneys",
+    },
+    "general_packaged": {},
+}
+
+
 # ============================================================
 # Stage 1: What Gemini extracts from the label image
 # ============================================================
@@ -137,7 +174,17 @@ class LabelExtraction(BaseModel):
 
     product_name: str | None = Field(
         None,
-        description="Product name as shown on the package"
+        description=(
+            "Product name WITHOUT the brand and WITHOUT the flavour/variant, "
+            "e.g. 'Bourbon' (not 'Britannia Bourbon Chocolate Cream'), 'Aloo Bhujia', 'Ragi Chips'"
+        )
+    )
+    variant: str | None = Field(
+        None,
+        description=(
+            "Flavour or variant if printed, e.g. 'Chocolate Cream', 'Classic Salted', 'Peri Peri'. "
+            "Null if the product has no distinct flavour/variant."
+        )
     )
     product_category: ProductCategory = Field(
         default=ProductCategory.GENERAL_PACKAGED,
@@ -152,9 +199,21 @@ class LabelExtraction(BaseModel):
         None,
         description="Brief reason why the product belongs to this category"
     )
+    sub_category: str | None = Field(
+        None,
+        description=(
+            "Narrower shelf group inside product_category. Use ONE key from: "
+            + "; ".join(f"{cat}: {', '.join(subs)}" for cat, subs in SUB_CATEGORIES.items() if subs)
+            + ". Null if none fits."
+        )
+    )
     brand: str | None = Field(
         None,
-        description="Brand name if visible"
+        description="Brand / company name as printed, e.g. 'Britannia', 'Haldiram's'"
+    )
+    mrp_inr: float | None = Field(
+        None,
+        description="Maximum Retail Price (MRP ₹, incl. of all taxes) printed on the pack, as a number"
     )
     net_weight_g: float | None = Field(
         None,
@@ -316,6 +375,15 @@ class PriceAnalysis(BaseModel):
     """Price-per-nutrient breakdown — the cost-effectiveness analysis."""
 
     price_inr: float
+    price_source: str = Field(
+        default="paid",
+        description="'mrp' when computed from the MRP printed on the pack, 'paid' when from the user's price",
+    )
+    mrp_inr: float | None = None
+    price_paid_inr: float | None = None
+    discount_pct: float | None = Field(
+        None, description="How far below MRP the user paid, in percent"
+    )
     price_per_g_protein: float | None = None
     price_per_g_fiber: float | None = None
     price_per_100_kcal: float | None = None
@@ -393,12 +461,17 @@ class ProductAnalysis(BaseModel):
     flags, price analysis, serving reality, alternatives, and education.
     """
 
+    # Saved catalog record this analysis belongs to (None for demo audits)
+    scan_id: int | None = None
+
     # Raw extraction
     extraction: LabelExtraction
 
     # Category classification
     product_category: ProductCategory = ProductCategory.GENERAL_PACKAGED
     category_display_name: str = "Packaged Food"
+    sub_category: str | None = None
+    sub_category_display_name: str | None = None
 
     # Analysis layers
     ingredient_flags: list[IngredientFlag] = Field(default_factory=list)
@@ -465,4 +538,9 @@ class AnalyzeResponse(BaseModel):
     """API response wrapper."""
     success: bool = True
     analysis: ProductAnalysis
+    scan_id: int | None = None
+    edit_token: str | None = Field(
+        None,
+        description="Secret returned only to the person who scanned; lets them fix the product name",
+    )
     errors: list[str] = Field(default_factory=list)

@@ -1,119 +1,143 @@
-# LabelPadho (लेबल पढ़ो) (Read the Label)
+# LabelPadho (लेबल पढ़ो) — *Read the Label*
 
-> **Decoding Indian Packaged Food with Multimodal AI & Deterministic Nutrition Analysis.**  
-> Built by a fitness-focused engineer for youth, students, and health-conscious eaters navigating misleading packaging.
+> **Snap a packaged food label. Get the truth behind the marketing in plain language.**
+> Built for Indian shoppers (students, gym-goers, parents) who are tired of "High Protein", "Multigrain" and "Real Fruit" on the front contradicting the small print on the back.
 
----
-
-## The Problem
-In the Indian FMCG landscape, marketing deception is rampant:
-1. **The "High Protein" Illusion**: "Protein chips" charging 3× price premiums for just 5g of low-grade protein per pack.
-2. **The Serving Size Trap**: A 150g packet listing macros for a tiny 25g serving to hide 1,200mg sodium and 15g palm oil.
-3. **Regulatory Loopholes**: Harmful additives banned or flagged in the European Union (e.g. Tartrazine INS 102, Potassium Bromate, TBHQ) remain common in Indian supermarket aisles.
-4. **Whole Food Amnesia**: Consumers pay ₹150 for ultra-processed protein bars when traditional Indian foods (boiled chana, eggs, paneer, sattu) provide superior bioavailability at 1/10th the cost.
-
-**LabelPadho** solves this by letting users snap photos of the nutrition table and ingredient list to get an instant, unvarnished breakdown.
+**Live app:** [labelpadho.utsavgoyal.tech](https://labelpadho.utsavgoyal.tech)
 
 ---
 
-## Architecture & Pipeline
+## What it does
+
+Take up to three kinds of photos (nutrition table, ingredients, front of pack + any claim panels) and LabelPadho returns a full audit:
+
+| Feature | What the shopper sees | Real example |
+|---|---|---|
+| **Claim audit** | Every marketing claim checked against ingredients and FSSAI rules: verified, misleading or debunked | "Classic Butter" popcorn: butter is **0.16%** of the pack |
+| **100% ingredient breakdown** | Donut chart of what you're actually eating, built from declared QUID % and the nutrition table | Popcorn 65%, palmolein/cottonseed oil ~29% |
+| **Portion reality check** | What your real portion contains, not the brand's tiny "serving" | A 150g chips pack with a 30g serving → full pack = 1,500mg sodium |
+| **Calorie math check** | Atwater formula (4/4/9 kcal per g) re-computes energy to catch rigged tables | Flags labels whose printed kcal doesn't match their macros |
+| **Flagged additives** | Additives banned or restricted in the EU/US but common in India | Tartrazine (INS 102), Potassium Bromate, TBHQ |
+| **Health score + shelf ranking** | 1–10 score, ranked against products **on the same shelf** | "Ranked #3 of 4 in Popcorn", with healthier options listed |
+| **Value for money** | Price per gram of protein / fibre, from the MRP printed on the pack (or what you paid) | "You paid 20% below MRP" |
+| **Desi swaps + home recipes** | Cheaper whole-food alternatives and quick Indian recipes in the same craving category | Roasted chana instead of a ₹150 protein bar |
+
+### Search instead of scanning
+Every product anyone scans goes into a **shared catalog**. The next person can search "bourbon", "bhujia" or "ragi chips" and open the full audit instantly, with no photos and no AI call. The search box suggests recently scanned products before you type, plus sample audits for a quick demo.
+
+---
+
+## How it works
 
 ```mermaid
 flowchart TD
-    subgraph Client["Frontend (Next.js / TypeScript)"]
-        UI["Photo Upload + Price Input (₹)"]
+    subgraph Client["Frontend · Next.js + TypeScript (Vercel)"]
+        UP["Photo upload (nutrition, ingredients, 1–4 claim photos)"]
+        SR["Catalog search + suggestions"]
     end
 
-    subgraph Backend["FastAPI Backend Service"]
-        EP["/api/analyze Endpoint"]
-        VAL["File Validation (MIME & Size checks)"]
-        GEM["Gemini 2.5 Flash (Multimodal Structured Extraction)"]
-        ENG["Rule-Based Deterministic Analysis Engine"]
+    subgraph API["Backend · FastAPI (Render)"]
+        AN["/api/analyze"]
+        GEM["Gemini Flash vision<br/>schema-constrained extraction"]
+        SAN["Sanity layer<br/>repairs impossible values, standardises names"]
+        ENG["Deterministic analysis engine<br/>claims · QUID · portions · Atwater · price · score"]
+        CAT["Catalog APIs<br/>search · suggestions · shelf alternatives · rename"]
     end
 
-    subgraph Knowledge["Knowledge Base & State"]
-        ADD["Flagged Additives DB (EU/FDA/FSSAI cross-referenced)"]
-        NAT["Indian Whole-Food Natural Alternatives"]
-        LRN["User Learning State (Deduplicates taught concepts)"]
+    subgraph Data["Data"]
+        PG[("Postgres (Neon)<br/>shared product catalog")]
+        KB["Knowledge base<br/>flagged additives · desi alternatives · recipes"]
     end
 
-    UI -->|Multipart Upload| EP
-    EP --> VAL
-    VAL --> GEM
-    GEM -->|Pydantic Model: LabelExtraction| ENG
-    ENG <--> ADD
-    ENG <--> NAT
-    ENG <--> LRN
-    ENG -->|Pydantic Model: ProductAnalysis| UI
+    UP --> AN --> GEM -->|LabelExtraction| SAN --> ENG -->|ProductAnalysis| UP
+    ENG <--> KB
+    AN -->|save once| PG
+    SR --> CAT <--> PG
 ```
 
----
-
-## Key Engineering Highlights (Resume Worthy)
-
-- **Multimodal Schema-Constrained Extraction**: Directly utilized Gemini 2.5 Flash's multimodal vision capabilities bounded by a strict Pydantic `LabelExtraction` schema. Bypasses error-prone two-step OCR+LLM pipelines and preserves spatial table context across mixed Hindi/English packaging.
-- **Strict Decoupling of AI & Logic**: The AI only transcribes the label into structured data. 100% of the mathematical ratios (price-per-gram-protein, serving multipliers) and regulatory risk flags are computed by a deterministic Python engine. This eliminates LLM hallucination in calculations.
-- **Automated Serving Size Normalization**: Detects artificially small serving sizes and computes total-package intake reality (e.g., exposing when a snack fulfills 75% of daily sodium in one bag).
-- **Personalized Nutrition Learning Engine**: Tracks topics taught to each user (e.g. sodium retention, trans-fat labeling loopholes) to avoid repetitive preaching as user nutritional literacy grows.
-- **Shared Crowd-Sourced Product Catalog**: Every label audited once is persisted to a hosted Postgres database and becomes instantly searchable by every user — repeat lookups skip the multimodal LLM call entirely (sub-second instead of ~20s). Multi-word, case-insensitive search across name and brand, de-duplicated to the latest audit per product.
-- **Automated Test Coverage**: Complete Pytest test suite testing edge cases (hidden trans fats, multi-serving math, additive matching) in isolation without mocking external network calls.
+1. **Gemini only transcribes.** It returns a strict Pydantic `LabelExtraction` (brand, product, variant, category, nutrition per serving *and* per 100g, ingredients with %, claims, MRP).
+2. **A sanity layer fixes what can be detected.** For example, if "36g sugar per 16.7g serving" comes back, that can't fit in the serving, so it is rebuilt from the per-100g column.
+3. **Plain Python does all the maths and judgement.** No LLM is involved in scores, ratios or regulatory flags, so the numbers are reproducible and unit-tested.
+4. **The result is saved once** to the shared catalog and served to everyone after that.
 
 ---
 
-## Tech Stack
+## Engineering decisions worth talking about
 
-- **Backend**: Python 3.12+, FastAPI, Pydantic v2, pydantic-settings, Uvicorn
-- **AI/LLM**: Google GenAI SDK (Gemini 2.5 Flash multimodal)
-- **Validation & Math**: Pydantic, NumPy/Pandas ready
-- **Database**: SQLModel (SQLAlchemy) on Postgres (Neon serverless, free tier) with SQLite fallback for local dev
-- **Testing**: Pytest
-- **DevOps**: Docker, Docker Compose
+- **AI for perception, code for judgement.** The LLM never computes a number the user sees. That removes hallucinated maths and makes the core logic testable without network calls (54 Pytest tests).
+- **Self-healing extraction.** Vision models sometimes read the wrong column of a nutrition table. Physical impossibility checks (macros heavier than the serving, more than 9 kcal per gram) detect it, and the values are rebuilt from per-100g data. A missing pack weight is derived from servings × serving size.
+- **A shared catalog that respects what is shared.** The **MRP** is printed on every Indian pack by law, so it is a fact about the product and is stored. **What you paid** depends on shop, city and offers, so it is used only for your own view and never saved.
+- **Fixing AI mistakes without accounts.** When a scan finishes, the server returns a random **edit token** that only the scanner's browser keeps. Renaming requires that token (compared in constant time), so whoever scanned a product can fix a misread name ("Nenimems" → "Nenimemi's"), but strangers can't vandalise the shared catalog.
+- **Fair comparisons.** Nine categories, each split into shelf-level sub-categories (biscuits vs chocolates vs mithai). Alternatives compare within the same shelf and fall back to the wider category only when the shelf is empty.
+- **Context-aware warnings.** "The full packet has 1,500mg sodium" makes sense for chips, not for a ketchup bottle or a bag of atta. Multi-use packs (condiments, staples, dairy, packs over 400g) are judged per serving instead.
+- **Clean data from messy labels.** Names are split into brand / product / variant and standardised ("BOURBON" → "Bourbon", "KTC" stays "KTC"), so search results and repeat scans line up.
+- **Zero-downtime schema changes on a free stack.** A small forward-only migration adds new nullable columns to the live Postgres table at startup. It was tested against real Postgres. Alembic would be the next step with a team.
 
 ---
 
-## Getting Started
+## Tech stack
 
-### 1. Clone & Set Environment
+| Layer | Tech | Hosting (all free tier) |
+|---|---|---|
+| Frontend | Next.js 15, React 19, TypeScript, Tailwind CSS 4 | Vercel |
+| Backend | Python 3.12, FastAPI, Pydantic v2, SQLModel / SQLAlchemy | Render |
+| AI | Google GenAI SDK: Gemini Flash multimodal, structured output | Gemini API |
+| Database | Postgres (serverless) in production, SQLite locally | Neon |
+| Quality | Pytest (unit + API tests with an in-memory DB) | — |
+
+### API
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| `POST` | `/api/analyze` | Upload label photos (+ optional price paid, portion) and get a full audit, `scan_id` and `edit_token` |
+| `GET` | `/api/products/search?q=` | Multi-word search over brand, product and variant (latest audit per product) |
+| `GET` | `/api/products/suggestions` | Recently scanned unique products (search dropdown) |
+| `GET` | `/api/products/{id}/alternatives` | Shelf ranking and healthier products in the same sub-category |
+| `GET` | `/api/history` · `/api/history/{id}` | Past scans · full saved audit |
+| `PATCH` | `/api/history/{id}` | Fix brand / product / variant (requires the scanner's `edit_token`) |
+| `DELETE` | `/api/history/{id}` | Remove a scan |
+
+Interactive docs: `http://localhost:8000/docs`
+
+---
+
+## Run it locally
+
 ```bash
-git clone https://github.com/utsavgoyal/LabelPadho.git
+git clone https://github.com/Utsav202004/LabelPadho.git
 cd LabelPadho
-cp .env.example .env
-```
-Edit `.env` and insert your Gemini API Key:
-```env
-GEMINI_API_KEY=your_actual_key_here
+cp .env.example .env          # add GEMINI_API_KEY (free at aistudio.google.com)
 ```
 
-### 2. Run Backend Locally
+**Backend**
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
+python3 -m venv .venv && source .venv/bin/activate
 pip install -r backend/requirements.txt
-export PYTHONPATH=backend
-uvicorn app.main:app --reload --port 8000
+PYTHONPATH=backend uvicorn app.main:app --reload --port 8000
 ```
-Visit the interactive OpenAPI documentation at: `http://localhost:8000/docs`
 
-### 3. Run Automated Tests
+**Frontend**
 ```bash
-source .venv/bin/activate
-export PYTHONPATH=backend
-pytest backend/tests/test_analyzer.py -v
+cd frontend && npm install && npm run dev   # http://localhost:3000
 ```
 
-### 4. Shared Product Catalog (Free Hosted Postgres)
-Without `DATABASE_URL`, scans are saved to a local SQLite file — fine for development, but free app hosts (Render) wipe the disk on every deploy/restart. To make every scanned product permanently searchable by all users:
+**Tests**
+```bash
+cd backend && ../.venv/bin/python -m pytest -q
+```
 
-1. Create a free project at [neon.tech](https://neon.tech) (no card required; the database sleeps when idle and wakes in about a second on the next request — check Neon's pricing page for current storage limits).
-2. Copy the connection string from the Neon dashboard (**Connect** → it looks like `postgresql://user:pass@ep-xxxx.aws.neon.tech/neondb?sslmode=require`).
-3. Set it as `DATABASE_URL`:
-   - Locally: add it to `.env`.
-   - On Render: **Service → Environment → Add Environment Variable**, then redeploy.
-4. On startup the backend logs `Database initialized (hosted Postgres via DATABASE_URL)` and creates its tables automatically.
+Without `DATABASE_URL`, scans go to a local SQLite file, so no setup is needed.
 
-| Layer | Free service |
-|-------|--------------|
-| Frontend | Vercel (Hobby) |
-| Backend API | Render (Free web service) |
-| Database | Neon (Free plan) |
-| AI | Gemini API free tier |
+### Shared catalog in production (free Postgres)
+Free hosts like Render wipe the disk on every deploy, so production uses Neon:
+1. Create a free project at [neon.tech](https://neon.tech) and copy its connection string (**Connect** → pooled connection).
+2. Add it as `DATABASE_URL` in Render → **Environment**, then redeploy.
+3. Startup logs `Database initialized (hosted Postgres via DATABASE_URL)`. Tables and new columns are created automatically.
+
+---
+
+## Roadmap
+- **Barcode scanning** for exact product matching and instant lookups
+- **Crowd-sourced price reports** (price, city, date) for typical-price ranges
+- **Accounts** so renames become reviewed suggestions instead of token-based edits
+- **Per-100g health scoring** so small stated servings can't flatter a product

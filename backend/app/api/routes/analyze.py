@@ -36,6 +36,7 @@ NEW CONCEPTS:
 """
 
 import logging
+import secrets
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
@@ -57,7 +58,7 @@ analyzer = Analyzer()
 
 # Limits
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
-MAX_FILES = 5
+MAX_CLAIM_PHOTOS = 4  # front + back/side panels that carry marketing claims
 ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp", "image/heic"}
 
 
@@ -73,10 +74,13 @@ async def analyze_label(
         None,
         description="Photo of Ingredients list (Optional - if separate from nutrition chart)"
     ),
-    # Optional image 2: Front of package (for name & marketing claims verification)
-    front_package: UploadFile | None = File(
+    # Optional images: Front of package + any other panels with claims (name & claim verification)
+    front_package: list[UploadFile] | None = File(
         None,
-        description="Photo of Front of Package (Optional - used to verify claims like 'Multigrain', 'High Protein')"
+        description=(
+            "Photos of the front of pack and any other panels with marketing claims "
+            f"(Optional, up to {MAX_CLAIM_PHOTOS}) - used to verify claims like 'Multigrain', 'High Protein'"
+        ),
     ),
     # Optional manual product name if user doesn't want to snap front photo
     product_name: str | None = Form(
@@ -86,7 +90,11 @@ async def analyze_label(
     # Optional price for price-per-gram-protein calculations
     price: float | None = Form(
         None,
-        description="Product price in INR (Optional - calculates price-per-gram-protein vs eggs/chana)"
+        gt=0,
+        description=(
+            "Price the user actually paid in INR (Optional). Used only for this response; "
+            "the shared catalog stores the MRP read from the label instead."
+        ),
     ),
     expected_consumption_g: float | None = Form(
         None,
@@ -114,8 +122,13 @@ async def analyze_label(
     active_files: list[UploadFile] = [nutrition_label]
     if ingredients_label is not None:
         active_files.append(ingredients_label)
-    if front_package is not None:
-        active_files.append(front_package)
+    claim_photos = [f for f in (front_package or []) if f is not None and f.filename]
+    if len(claim_photos) > MAX_CLAIM_PHOTOS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Please upload at most {MAX_CLAIM_PHOTOS} front/claim photos.",
+        )
+    active_files.extend(claim_photos)
 
     image_bytes_list: list[bytes] = []
     mime_types: list[str] = []
@@ -191,7 +204,14 @@ async def analyze_label(
         f"edu_notes={len(analysis.educational_notes)}"
     )
 
-    # ---- Step 4: Persist scan record to database ----
+    # ---- Step 4: Persist scan record to the shared catalog ----
+    # The saved copy is priced at MRP (a product fact). What this user paid is
+    # personal (shop, city, offer), so it is shown to them but never stored.
+    stored_analysis = analysis.model_copy(
+        update={"price_analysis": analyzer.price_analysis_for(extraction, None)}
+    )
+    scan_id: int | None = None
+    edit_token = secrets.token_urlsafe(24)
     try:
         nutrition = extraction.nutrition_per_serving
         claims_debunked = len([c for c in analysis.claim_verifications if c.status == "debunked"])
@@ -204,8 +224,12 @@ async def analyze_label(
             user_id=user_id,
             product_name=extraction.product_name or product_name or "Food Product",
             product_category=analysis.product_category.value if analysis.product_category else "general_packaged",
+            sub_category=analysis.sub_category,
             brand=extraction.brand,
-            price_inr=price,
+            variant=extraction.variant,
+            mrp_inr=extraction.mrp_inr,
+            net_weight_g=extraction.net_weight_g,
+            price_inr=extraction.mrp_inr,
             health_score=analysis.health_score,
             one_line_summary=analysis.one_line_summary,
             protein_per_serving_g=nutrition.protein_g,
@@ -214,20 +238,29 @@ async def analyze_label(
             sodium_per_serving_mg=nutrition.sodium_mg,
             sugar_per_serving_g=nutrition.sugar_g,
             price_per_g_protein=(
-                analysis.price_analysis.price_per_g_protein
-                if analysis.price_analysis else None
+                stored_analysis.price_analysis.price_per_g_protein
+                if stored_analysis.price_analysis else None
             ),
             flag_count=len(analysis.ingredient_flags),
             debunked_claims_count=claims_debunked,
             misleading_claims_count=claims_misleading,
             has_calorie_discrepancy=has_cal_discrepancy,
-            full_analysis_json=analysis.model_dump_json(),
+            full_analysis_json=stored_analysis.model_dump_json(),
+            edit_token=edit_token,
         )
         session.add(scan_record)
         session.commit()
+        scan_id = scan_record.id
         logger.info(f"Saved scan record #{scan_record.id} for '{scan_record.product_name}'")
     except Exception as e:
         logger.error(f"Failed to persist scan record to database: {e}")
         # We don't fail the user response if database persistence encountered an issue
 
-    return AnalyzeResponse(success=True, analysis=analysis)
+    if scan_id is None:
+        return AnalyzeResponse(success=True, analysis=analysis)
+    return AnalyzeResponse(
+        success=True,
+        analysis=analysis.model_copy(update={"scan_id": scan_id}),
+        scan_id=scan_id,
+        edit_token=edit_token,
+    )

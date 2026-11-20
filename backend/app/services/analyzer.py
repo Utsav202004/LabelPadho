@@ -44,7 +44,9 @@ import logging
 import re
 from pathlib import Path
 
+from app.services.naming import standardize_name
 from app.models.schemas import (
+    SUB_CATEGORIES,
     ClaimVerification,
     EducationalNote,
     ExtractedIngredient,
@@ -139,6 +141,15 @@ DAILY_LIMITS = {
 }
 
 
+# Packs that are used a little at a time (never finished in one sitting)
+MULTI_USE_CATEGORIES = {
+    ProductCategory.CONDIMENT_SAUCE,
+    ProductCategory.STAPLE_GRAIN,
+    ProductCategory.DAIRY_DAIRY_ALT,
+}
+MULTI_USE_PACK_G = 400  # anything bigger than this is a family/multi-use pack
+
+
 # Nutrient fields that scale linearly with the amount eaten
 NUTRIENT_FIELDS = [
     "energy_kcal", "protein_g", "total_fat_g", "saturated_fat_g",
@@ -205,6 +216,21 @@ def sanitize_extraction(extraction: LabelExtraction) -> LabelExtraction:
     per_100g = extraction.nutrition_per_100g
     update: dict = {}
 
+    # Consistent display casing ("BOURBON" → "Bourbon")
+    for field in ("product_name", "brand", "variant"):
+        current = getattr(extraction, field)
+        cleaned = standardize_name(current)
+        if cleaned != current:
+            update[field] = cleaned
+
+    # Sub-category must belong to the chosen category, otherwise drop it
+    if extraction.sub_category is not None:
+        category = extraction.product_category.value if extraction.product_category else "general_packaged"
+        key = extraction.sub_category.strip().lower()
+        valid = key if key in SUB_CATEGORIES.get(category, {}) else None
+        if valid != extraction.sub_category:
+            update["sub_category"] = valid
+
     if serving_g and serving_g > 0:
         per_100g_ok = _has_nutrients(per_100g) and not _is_physically_impossible(per_100g, 100)
 
@@ -237,7 +263,8 @@ def sanitize_extraction(extraction: LabelExtraction) -> LabelExtraction:
 
         servings = serving.servings_per_package
         if not extraction.net_weight_g and servings and servings > 0:
-            update["net_weight_g"] = round(servings * serving_g, 1)
+            # "1.67 servings x 15g" → 25g; servings are printed rounded, so whole grams is honest
+            update["net_weight_g"] = float(round(servings * serving_g))
 
     return extraction.model_copy(update=update) if update else extraction
 
@@ -288,8 +315,8 @@ class Analyzer:
         # Run each analysis layer independently
         flags = self._flag_ingredients(extraction)
         serving = self._analyze_serving_size(extraction, expected_consumption_g)
-        price = self._analyze_price(extraction, price_inr) if price_inr else None
-        alternatives = self._suggest_alternatives(extraction, price_inr)
+        price = self.price_analysis_for(extraction, price_inr)
+        alternatives = self._suggest_alternatives(extraction, price.price_inr if price else None)
         edu_notes = self._generate_educational_notes(extraction, flags, learned_topics)
         claim_verifications = self._verify_front_claims(extraction)
         math_verification = self._verify_nutrition_math(extraction)
@@ -312,10 +339,15 @@ class Analyzer:
 
         homemade_recipes = self._suggest_homemade_recipes(extraction, category)
 
+        sub_category = extraction.sub_category
+        sub_display = SUB_CATEGORIES.get(category.value, {}).get(sub_category) if sub_category else None
+
         return ProductAnalysis(
             extraction=extraction,
             product_category=category,
             category_display_name=category_meta["display_name"],
+            sub_category=sub_category,
+            sub_category_display_name=sub_display,
             ingredient_flags=flags,
             serving_reality=serving,
             price_analysis=price,
@@ -492,7 +524,27 @@ class Analyzer:
                 f"For the {expected_consumption_g:g}g you said you would eat, that is "
                 + ", ".join(details) + "."
             )
-        if servings and servings > 1.5:
+        category = extraction.product_category or ProductCategory.GENERAL_PACKAGED
+        multi_use = category in MULTI_USE_CATEGORIES or bool(package_g and package_g > MULTI_USE_PACK_G)
+        if servings and servings > 1.5 and multi_use:
+            # Nobody finishes a ketchup bottle or a bag of atta in one sitting:
+            # show what a realistic serving contains instead of whole-pack totals.
+            per_serving = []
+            if nutrition.sugar_g is not None:
+                per_serving.append(f"{nutrition.sugar_g:g}g sugar")
+            if nutrition.sodium_mg is not None:
+                per_serving.append(f"{nutrition.sodium_mg:.0f}mg sodium")
+            size = f"{package_g:g}g pack" if package_g else "pack"
+            note = (
+                f"This is a multi-use {size} (about {servings:.0f} servings of {serving_g:g}g), "
+                f"so figures are judged per serving, not for the whole pack."
+            )
+            if per_serving:
+                note += f" One {serving_g:g}g serving has " + ", ".join(per_serving) + "."
+            if nutrition.sodium_mg and nutrition.sodium_mg > DAILY_LIMITS["sodium_mg"] * 0.1:
+                note += " Easy to use more than one serving, so watch the portion."
+            realistic = f"{realistic} {note}".strip()
+        elif servings and servings > 1.5:
             serving_description = (nutrition.serving_unit_description or "").strip()
             # Skip descriptions that only repeat the weight, e.g. "16.7 g"
             if re.fullmatch(r"[\d.,\s]*(g|gm|gms|grams?)?", serving_description, re.IGNORECASE):
@@ -563,6 +615,31 @@ class Analyzer:
     # ========================================================
     # Analysis Layer 3: Price Analysis
     # ========================================================
+
+    def price_analysis_for(
+        self, extraction: LabelExtraction, price_paid_inr: float | None
+    ) -> PriceAnalysis | None:
+        """
+        Price analysis from the best available price.
+
+        - MRP is printed on every Indian pack (Legal Metrology rules), so it is a
+          fact about the PRODUCT and safe to store in the shared catalog.
+        - What someone actually paid varies by shop/city/offer, so it is only
+          used for that person's view (and never saved).
+        """
+        mrp = extraction.mrp_inr if extraction.mrp_inr and extraction.mrp_inr > 0 else None
+        paid = price_paid_inr if price_paid_inr and price_paid_inr > 0 else None
+        price = paid or mrp
+        if not price:
+            return None
+        analysis = self._analyze_price(extraction, price)
+        discount = round((mrp - paid) / mrp * 100, 1) if (mrp and paid and paid < mrp) else None
+        return analysis.model_copy(update={
+            "price_source": "paid" if paid else "mrp",
+            "mrp_inr": mrp,
+            "price_paid_inr": paid,
+            "discount_pct": discount,
+        })
 
     def _analyze_price(
         self, extraction: LabelExtraction, price_inr: float

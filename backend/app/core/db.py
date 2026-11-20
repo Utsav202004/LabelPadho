@@ -21,10 +21,16 @@ local disk on every deploy, so a SQLite file there would silently lose data.
 Same SQLModel code runs on both; only the connection string changes.
 """
 
+import json
+import logging
 from pathlib import Path
 
+from sqlalchemy import inspect, text
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from sqlmodel import SQLModel, Session, create_engine
+from sqlmodel import SQLModel, Session, create_engine, select
+
+logger = logging.getLogger(__name__)
 
 # Local fallback: SQLite file in the backend/ folder
 DB_FILE = Path(__file__).resolve().parent.parent.parent / "labelpadho.db"
@@ -76,8 +82,65 @@ else:
 
 
 def init_db():
-    """Create database tables if they do not exist."""
+    """Create tables, add any columns new code expects, and tidy existing names."""
+    # Import here so the table is registered on SQLModel.metadata
+    from app.models import db_models  # noqa: F401
+
     SQLModel.metadata.create_all(engine)
+    add_missing_columns()
+    standardize_existing_names()
+
+
+def add_missing_columns():
+    """
+    Tiny forward-only migration.
+
+    `create_all` creates missing TABLES but never adds new COLUMNS to an
+    existing table (e.g. the live Neon table created before `variant` existed).
+    For each model column missing in the database, run ALTER TABLE ... ADD
+    COLUMN. Only nullable columns are ever added, so existing rows stay valid.
+    A real team would use Alembic; this keeps a solo project dependency-free.
+    """
+    inspector = inspect(engine)
+    for table in SQLModel.metadata.sorted_tables:
+        if not inspector.has_table(table.name):
+            continue
+        existing = {col["name"] for col in inspector.get_columns(table.name)}
+        for column in table.columns:
+            if column.name in existing or not column.nullable:
+                continue
+            col_type = column.type.compile(dialect=engine.dialect)
+            with engine.begin() as conn:
+                conn.execute(text(f'ALTER TABLE "{table.name}" ADD COLUMN "{column.name}" {col_type}'))
+            logger.info("Added column %s.%s (%s)", table.name, column.name, col_type)
+
+
+def standardize_existing_names():
+    """One-time-ish backfill: apply name standardisation to rows saved before it existed (idempotent)."""
+    from app.models.db_models import ProductScan
+    from app.services.naming import standardize_name
+
+    with Session(engine) as session:
+        changed = 0
+        for scan in session.exec(select(ProductScan)).all():
+            new_name = standardize_name(scan.product_name) or scan.product_name
+            new_brand = standardize_name(scan.brand)
+            if new_name == scan.product_name and new_brand == scan.brand:
+                continue
+            scan.product_name, scan.brand = new_name, new_brand
+            try:
+                data = json.loads(scan.full_analysis_json or "{}")
+                if isinstance(data.get("extraction"), dict):
+                    data["extraction"]["product_name"] = new_name
+                    data["extraction"]["brand"] = new_brand
+                    scan.full_analysis_json = json.dumps(data)
+            except json.JSONDecodeError:
+                pass
+            session.add(scan)
+            changed += 1
+        if changed:
+            session.commit()
+            logger.info("Standardised names on %d existing scan(s)", changed)
 
 
 def get_session():
