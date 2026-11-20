@@ -20,6 +20,9 @@ def session():
             ProductScan(product_name="maggi 2-minute noodles", brand="Nestle", created_at=now),
             ProductScan(product_name="Whey Protein", brand="Amul", created_at=now - timedelta(days=1)),
             ProductScan(product_name="100% Atta Bread", brand=None, created_at=now - timedelta(days=3)),
+            ProductScan(product_name="Aloo Bhujia", brand="Haldiram's", created_at=now - timedelta(days=4)),
+            ProductScan(product_name="Classic Salted", brand="Lay's", created_at=now - timedelta(days=5)),
+            ProductScan(product_name="Bourbon", brand="Britannia", created_at=now - timedelta(days=6)),
         ])
         s.commit()
         yield s
@@ -47,3 +50,21 @@ def test_like_wildcards_are_literal(session):
 
 def test_blank_query_returns_nothing(session):
     assert search_scans(session, "   ", limit=10) == []
+
+
+
+@pytest.mark.parametrize("query, expected", [
+    ("bhujiya", "Aloo Bhujia"),     # Hinglish spelling
+    ("magi", "maggi 2-minute noodles"),  # missing double letter
+    ("lays", "Classic Salted"),      # apostrophe in brand
+    ("burbon", "Bourbon"),          # typo
+    ("haldirams bhujia", "Aloo Bhujia"),
+])
+def test_typo_tolerant_search(session, query, expected):
+    names = [r.product_name for r in search_scans(session, query, limit=5)]
+    assert expected in names
+
+
+def test_fuzzy_search_does_not_match_unrelated_words(session):
+    assert search_scans(session, "chocolate", limit=5) == []
+    assert search_scans(session, "amul noodles", limit=5) == []

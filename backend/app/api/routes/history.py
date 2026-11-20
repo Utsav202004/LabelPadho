@@ -5,9 +5,9 @@ Provides:
 - GET /api/history: List recent scans with filtering (?q= searches name/brand)
 - GET /api/history/{id}: Fetch full analysis details of a specific past scan
 - PATCH /api/history/{id}: Fix a misread brand/name/variant (only with the scanner's edit token)
-- DELETE /api/history/{id}: Remove a scan from history
+- DELETE /api/history/{id}: Remove a scan (scanner's edit token or admin key)
 - POST /api/history/{id}/report: Flag an audit as wrong (review queue)
-- GET /api/reports: Review queue (needs REPORTS_ADMIN_KEY)
+- GET /api/reports: Review queue (needs ADMIN_KEY)
 """
 
 import json
@@ -15,12 +15,12 @@ import secrets
 from datetime import datetime
 from typing import List, Literal, Optional
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
-from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy import func
 from pydantic import BaseModel, Field
 from sqlmodel import Session, select
 
 from app.core.db import get_session
+from app.core.admin import is_admin, require_admin
 from app.core.rate_limit import SlidingWindowLimiter
 from app.models.db_models import DataReport, ProductScan, ProductScanRead
 from app.models.schemas import ProductAnalysis
@@ -127,13 +127,23 @@ async def rename_scan(
 @router.delete("/history/{scan_id}")
 async def delete_scan(
     scan_id: int,
+    x_edit_token: Optional[str] = Header(None),
+    x_admin_key: Optional[str] = Header(None),
     session: Session = Depends(get_session),
 ):
-    """Delete a scan record from history."""
+    """
+    Delete a catalog entry. The catalog is shared, so only the person who
+    scanned it (edit token) or an admin may delete it.
+    """
     scan = session.get(ProductScan, scan_id)
     if not scan:
         raise HTTPException(status_code=404, detail="Scan record not found")
+    owner = bool(scan.edit_token and x_edit_token and secrets.compare_digest(scan.edit_token, x_edit_token))
+    if not (owner or is_admin(x_admin_key)):
+        raise HTTPException(status_code=403, detail="Only the person who scanned this product can delete it")
 
+    for report in session.exec(select(DataReport).where(DataReport.scan_id == scan_id)).all():
+        session.delete(report)
     session.delete(scan)
     session.commit()
     return {"success": True, "message": f"Scan {scan_id} deleted"}
@@ -163,11 +173,6 @@ async def report_scan(
     return {"success": True, "report_count": count}
 
 
-class AdminSettings(BaseSettings):
-    reports_admin_key: Optional[str] = None
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
-
-
 class ReportRead(BaseModel):
     id: int
     scan_id: int
@@ -179,16 +184,11 @@ class ReportRead(BaseModel):
 
 @router.get("/reports", response_model=List[ReportRead])
 async def list_reports(
-    x_admin_key: Optional[str] = Header(None),
     limit: int = Query(50, ge=1, le=200),
     session: Session = Depends(get_session),
+    _admin: None = Depends(require_admin),
 ):
-    """Review queue for reported audits. Disabled unless REPORTS_ADMIN_KEY is set."""
-    admin_key = AdminSettings().reports_admin_key
-    if not admin_key:
-        raise HTTPException(status_code=404, detail="Not found")
-    if not x_admin_key or not secrets.compare_digest(admin_key, x_admin_key):
-        raise HTTPException(status_code=401, detail="Admin key required")
+    """Review queue for reported audits. Hidden unless ADMIN_KEY is set."""
     rows = session.exec(
         select(DataReport, ProductScan.product_name)
         .join(ProductScan, ProductScan.id == DataReport.scan_id)

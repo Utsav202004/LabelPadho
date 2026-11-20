@@ -12,9 +12,6 @@ import {
   Calculator,
   CheckCircle2,
   XCircle,
-  History,
-  ScanLine,
-  Trash2,
   ArrowRight,
   PieChart,
   ChefHat,
@@ -223,6 +220,13 @@ interface AlternativesResult {
 }
 
 // "Britannia Bourbon (Chocolate Cream)" without repeating the brand or variant
+// Same Hinglish normalisation as the backend search: "bhujiya" ≈ "bhujia", "maggi" ≈ "magi"
+function phonetic(text: string): string {
+  let t = text.toLowerCase().replace(/[^a-z0-9]/g, "");
+  for (const [a, b] of [["ph", "f"], ["ee", "i"], ["oo", "u"], ["y", "i"], ["w", "v"], ["z", "j"], ["q", "k"]]) t = t.split(a).join(b);
+  return t.replace(/(.)\1+/g, "$1");
+}
+
 // Compare ignoring case and punctuation, so "Lay's" matches "Lays"
 const squash = (t: string) => t.toLowerCase().replace(/[^a-z0-9]/g, "");
 function productTitle(brand?: string | null, name?: string | null, variant?: string | null): string {
@@ -981,7 +985,7 @@ function IngredientDonutChart({ breakdown }: { breakdown?: IngredientBreakdown }
         <div className="mb-6 p-4 rounded-xl border border-amber-300 bg-amber-50/80 flex items-start gap-3">
           <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
           <div>
-            <span className="text-xs font-bold uppercase tracking-wider text-amber-900 block mb-0.5">
+            <span className="text-xs font-bold text-amber-900 block mb-0.5">
               Hero Ingredient Illusion Caught
             </span>
             <p className="text-xs sm:text-sm text-amber-950 leading-relaxed font-medium">
@@ -1030,7 +1034,7 @@ function IngredientDonutChart({ breakdown }: { breakdown?: IngredientBreakdown }
 
             {/* Center Label inside Donut Hole */}
             <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-3 pointer-events-none">
-              <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400">
+              <span className="text-[10px] font-bold text-slate-400">
                 {activeShare.category === "hero_ingredient"
                   ? "Hero Ingredient"
                   : activeShare.category === "sweetener"
@@ -1143,7 +1147,7 @@ function IngredientDonutChart({ breakdown }: { breakdown?: IngredientBreakdown }
           <div className="flex items-start gap-2.5 mb-2">
             <BookOpen className="w-4 h-4 text-indigo-600 flex-shrink-0 mt-0.5" />
             <div>
-              <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+              <h4 className="text-xs font-bold text-slate-900">
                 Why are some ingredients grouped? (FSSAI Descending Order Rule)
               </h4>
               <p className="text-xs text-slate-600 leading-relaxed mt-1">
@@ -1155,7 +1159,7 @@ function IngredientDonutChart({ breakdown }: { breakdown?: IngredientBreakdown }
 
           {breakdown.descending_ingredients && breakdown.descending_ingredients.length > 0 && (
             <div className="mt-3 pt-3 border-t border-slate-200/60">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-2">
+              <span className="text-[10px] font-bold text-slate-500 block mb-2">
                 Statutory Order of Ingredients (By Weight on Package):
               </span>
               <div className="flex flex-wrap gap-1.5">
@@ -1260,7 +1264,7 @@ function HomemadeRecipesCard({ recipes }: { recipes?: HomemadeRecipe[] }) {
 
               {recipe.hero_ingredients && recipe.hero_ingredients.length > 0 && (
                 <div className="mb-3">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                  <span className="text-[10px] font-bold text-slate-400 block mb-1">
                     Kitchen Ingredients
                   </span>
                   <div className="flex flex-wrap gap-1">
@@ -1509,51 +1513,77 @@ function ScoreBreakdown({ factors, basis }: { factors?: ScoreFactor[]; basis?: s
 }
 
 // ============================================================
-// Share — WhatsApp / native share / copy link
+// Share — one button, menu with WhatsApp / copy link / more
 // ============================================================
 
-function ShareButtons({ analysis }: { analysis: ProductAnalysis }) {
+function ShareMenu({ analysis }: { analysis: ProductAnalysis }) {
+  const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const ref = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, [open]);
+
   if (!analysis.scan_id) return null;
   const url = typeof window !== "undefined" ? `${window.location.origin}/p/${analysis.scan_id}` : "";
   const title = productTitle(analysis.extraction.brand, analysis.extraction.product_name, analysis.extraction.variant);
   const text = `${title} scores ${analysis.health_score ?? "?"}/10 on LabelPadho: ${analysis.one_line_summary}`;
+  const canNativeShare = typeof navigator !== "undefined" && "share" in navigator;
 
-  const nativeShare = async () => {
-    try {
-      await navigator.share({ title, text, url });
-    } catch {
-      /* user cancelled */
-    }
-  };
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(url);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setTimeout(() => {
+        setCopied(false);
+        setOpen(false);
+      }, 1200);
     } catch {
       /* clipboard blocked */
     }
   };
+  const more = async () => {
+    setOpen(false);
+    try {
+      await navigator.share({ title, text, url });
+    } catch {
+      /* cancelled */
+    }
+  };
 
+  const item = "w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer";
   return (
-    <div className="flex flex-wrap items-center gap-2 mt-3">
-      <a
-        href={`https://wa.me/?text=${encodeURIComponent(`${text}\n${url}`)}`}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-[#25D366] text-white hover:opacity-90 flex items-center gap-1.5"
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 flex items-center gap-1.5 cursor-pointer"
       >
-        <MessageCircle className="w-3.5 h-3.5" /> Share on WhatsApp
-      </a>
-      {typeof navigator !== "undefined" && "share" in navigator && (
-        <button type="button" onClick={nativeShare} className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 flex items-center gap-1.5 cursor-pointer">
-          <Share2 className="w-3.5 h-3.5" /> Share
-        </button>
-      )}
-      <button type="button" onClick={copy} className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 flex items-center gap-1.5 cursor-pointer">
-        <Link2 className="w-3.5 h-3.5" /> {copied ? "Link copied!" : "Copy link"}
+        <Share2 className="w-3.5 h-3.5" /> Share
       </button>
+      {open && (
+        <div role="menu" className="absolute z-20 mt-1 w-48 bg-white border border-slate-200 rounded-xl shadow-lg py-1">
+          <a role="menuitem" href={`https://wa.me/?text=${encodeURIComponent(`${text}\n${url}`)}`} target="_blank" rel="noopener noreferrer" onClick={() => setOpen(false)} className={item}>
+            <MessageCircle className="w-4 h-4 text-[#25D366]" /> WhatsApp
+          </a>
+          <button role="menuitem" type="button" onClick={copy} className={item}>
+            <Link2 className="w-4 h-4" /> {copied ? "Link copied!" : "Copy link"}
+          </button>
+          {canNativeShare && (
+            <button role="menuitem" type="button" onClick={more} className={item}>
+              <Share2 className="w-4 h-4" /> More options...
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -1607,7 +1637,7 @@ function ReportWrongData({ scanId, initialCount }: { scanId: number; initialCoun
     <div className="text-xs">
       {count > 0 && (
         <p className="text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-2.5 py-1.5 mb-2 inline-flex items-center gap-1.5">
-          <Flag className="w-3.5 h-3.5" /> {count} {count === 1 ? "person has" : "people have"} reported possible errors in this audit
+          <Flag className="w-3.5 h-3.5" /> {count} {count === 1 ? "person has" : "people have"} reported possible errors in this report
         </p>
       )}
       {status === "sent" ? (
@@ -1628,7 +1658,7 @@ function ReportWrongData({ scanId, initialCount }: { scanId: number; initialCoun
           </label>
           <label className="block font-semibold text-slate-700">
             Details (optional)
-            <textarea value={details} onChange={(e) => setDetails(e.target.value)} maxLength={500} rows={2} placeholder="e.g. Pack says 12g sugar, audit shows 36g" className="mt-1 w-full px-2 py-1.5 border border-slate-300 rounded-md bg-white font-normal" />
+            <textarea value={details} onChange={(e) => setDetails(e.target.value)} maxLength={500} rows={2} placeholder="e.g. Pack says 12g sugar, report shows 36g" className="mt-1 w-full px-2 py-1.5 border border-slate-300 rounded-md bg-white font-normal" />
           </label>
           {status === "error" && <p className="text-red-600">{message}</p>}
           <div className="flex gap-2">
@@ -1785,29 +1815,47 @@ function ComparePanel({ base, onClose }: { base: ProductAnalysis; onClose: () =>
 }
 
 // ============================================================
-// Barcode scanner (camera via the browser's BarcodeDetector, or typed digits)
+// Barcode scanner: live camera, a photo of the barcode, or typed digits.
+// Uses the browser's built-in BarcodeDetector where it exists (Chrome on
+// Android) and a WebAssembly polyfill elsewhere (iPhone Safari, Firefox).
 // ============================================================
+
+const BARCODE_FORMATS = ["ean_13", "ean_8", "upc_a", "upc_e"];
+
+async function getBarcodeDetector(): Promise<any> {
+  const Native = (window as any).BarcodeDetector;
+  if (Native) {
+    try {
+      const supported: string[] = await Native.getSupportedFormats();
+      if (BARCODE_FORMATS.some((f) => supported.includes(f))) return new Native({ formats: BARCODE_FORMATS });
+    } catch {
+      /* fall through to the polyfill */
+    }
+  }
+  const { BarcodeDetector } = await import("barcode-detector/ponyfill");
+  return new BarcodeDetector({ formats: BARCODE_FORMATS as any });
+}
+
+const firstRetailCode = (codes: any[]) => codes.find((c: any) => /^\d{8,14}$/.test(c.rawValue))?.rawValue as string | undefined;
 
 function BarcodeScanner({ onCode, onClose }: { onCode: (code: string) => void; onClose: () => void }) {
   const videoRef = React.useRef<HTMLVideoElement>(null);
-  const [supported, setSupported] = useState<boolean | null>(null);
   const [typed, setTyped] = useState("");
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [photoMsg, setPhotoMsg] = useState<string | null>(null);
 
   useEffect(() => {
-    const Detector = (window as any).BarcodeDetector;
-    if (!Detector || !navigator.mediaDevices?.getUserMedia) {
-      setSupported(false);
-      return;
-    }
-    setSupported(true);
     let stream: MediaStream | null = null;
-    let raf = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     let stopped = false;
-    const detector = new Detector({ formats: ["ean_13", "ean_8", "upc_a", "upc_e"] });
 
     (async () => {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setCameraError("Live camera isn't available here. Take a photo of the barcode or type the digits.");
+        return;
+      }
       try {
+        const detector = await getBarcodeDetector();
         stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
         if (!videoRef.current || stopped) return;
         videoRef.current.srcObject = stream;
@@ -1815,29 +1863,42 @@ function BarcodeScanner({ onCode, onClose }: { onCode: (code: string) => void; o
         const tick = async () => {
           if (stopped || !videoRef.current) return;
           try {
-            const codes = await detector.detect(videoRef.current);
-            const value = codes.find((c: any) => /^\d{8,14}$/.test(c.rawValue))?.rawValue;
+            const value = firstRetailCode(await detector.detect(videoRef.current));
             if (value) {
               onCode(value);
               return;
             }
           } catch {
-            /* frame not ready */
+            /* frame not ready yet */
           }
-          raf = requestAnimationFrame(tick);
+          timer = setTimeout(tick, 250); // ~4 checks a second is plenty and easy on phones
         };
         tick();
       } catch {
-        setCameraError("Camera access was blocked. You can type the barcode digits instead.");
+        setCameraError("Camera access was blocked. Take a photo of the barcode or type the digits.");
       }
     })();
 
     return () => {
       stopped = true;
-      cancelAnimationFrame(raf);
+      if (timer) clearTimeout(timer);
       stream?.getTracks().forEach((t) => t.stop());
     };
   }, [onCode]);
+
+  const scanPhoto = async (file: File | undefined) => {
+    if (!file) return;
+    setPhotoMsg("Reading barcode...");
+    try {
+      const detector = await getBarcodeDetector();
+      const bitmap = await createImageBitmap(file);
+      const value = firstRetailCode(await detector.detect(bitmap));
+      if (value) onCode(value);
+      else setPhotoMsg("Couldn't read a barcode in that photo. Try closer, flatter and in good light, or type the digits.");
+    } catch {
+      setPhotoMsg("Couldn't read that photo. Please type the digits instead.");
+    }
+  };
 
   return (
     <div className="mt-3 p-4 border border-slate-200 rounded-xl bg-slate-50">
@@ -1849,14 +1910,16 @@ function BarcodeScanner({ onCode, onClose }: { onCode: (code: string) => void; o
           <X className="w-4 h-4" />
         </button>
       </div>
-      {supported && !cameraError && (
+      {!cameraError ? (
         <video ref={videoRef} muted playsInline className="w-full max-h-56 object-cover rounded-lg bg-black mb-2" />
+      ) : (
+        <p className="text-xs text-slate-500 mb-2">{cameraError}</p>
       )}
-      {(supported === false || cameraError) && (
-        <p className="text-xs text-slate-500 mb-2">
-          {cameraError || "This browser can't read barcodes from the camera (works in Chrome on Android). Type the digits under the barcode:"}
-        </p>
-      )}
+      <label className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 cursor-pointer mb-2">
+        <Upload className="w-3.5 h-3.5" /> Take a photo of the barcode
+        <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => scanPhoto(e.target.files?.[0])} />
+      </label>
+      {photoMsg && <p className="text-xs text-slate-600 mb-2">{photoMsg}</p>}
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -1869,7 +1932,7 @@ function BarcodeScanner({ onCode, onClose }: { onCode: (code: string) => void; o
           inputMode="numeric"
           value={typed}
           onChange={(e) => setTyped(e.target.value)}
-          placeholder="e.g. 8901058851298"
+          placeholder="Or type the digits, e.g. 8901058851298"
           aria-label="Barcode digits"
           className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
         />
@@ -1880,7 +1943,6 @@ function BarcodeScanner({ onCode, onClose }: { onCode: (code: string) => void; o
 }
 
 export default function LabelPadhoApp({ initialScanId }: { initialScanId?: number } = {}) {
-  const [activeTab, setActiveTab] = useState<"scan" | "history">("scan");
   
   // Upload inputs
   const [nutritionFile, setNutritionFile] = useState<File | null>(null);
@@ -1940,7 +2002,7 @@ export default function LabelPadhoApp({ initialScanId }: { initialScanId?: numbe
       return;
     }
     const t1 = setTimeout(() => setLoadingMsg("Extracting nutrition table & ingredients with Gemini Vision..."), 6000);
-    const t2 = setTimeout(() => setLoadingMsg("Auditing FSSAI front claims, palm oil & Atwater math..."), 15000);
+    const t2 = setTimeout(() => setLoadingMsg("Checking front-of-pack claims, oils and calorie maths..."), 15000);
     const t3 = setTimeout(() => setLoadingMsg("Synthesizing plain-language verdict (cloud container waking up)..."), 28000);
     return () => {
       clearTimeout(t1);
@@ -1948,33 +2010,6 @@ export default function LabelPadhoApp({ initialScanId }: { initialScanId?: numbe
       clearTimeout(t3);
     };
   }, [loading]);
-
-  // History state
-  const [historyList, setHistoryList] = useState<HistoryCard[]>([]);
-  const [historyLoading, setHistoryLoading] = useState(false);
-
-  // Fetch history when tab switches
-  const loadHistory = async (q: string = "") => {
-    setHistoryLoading(true);
-    try {
-      const params = q.trim() ? `?q=${encodeURIComponent(q.trim())}` : "";
-      const res = await fetch(`${API_BASE}/api/history${params}`);
-      if (res.ok) {
-        const data = await res.json();
-        setHistoryList(data);
-      }
-    } catch (e) {
-      console.error("Failed to load history", e);
-    } finally {
-      setHistoryLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (activeTab === "history") {
-      loadHistory(historyQuery);
-    }
-  }, [activeTab]);
 
   // Product search (scanner tab) — find an already-audited product instead of re-uploading photos
   const [searchQuery, setSearchQuery] = useState("");
@@ -2005,8 +2040,8 @@ export default function LabelPadhoApp({ initialScanId }: { initialScanId?: numbe
   const q = searchQuery.trim().toLowerCase();
   const matchingDemos = DEMO_AUDITS.filter(({ analysis: a }) => {
     if (!q) return true;
-    const hay = `${a.extraction.brand || ""} ${a.extraction.product_name || ""}`.toLowerCase();
-    return q.split(/\s+/).every((word) => hay.includes(word));
+    const hay = phonetic(`${a.extraction.brand || ""} ${a.extraction.product_name || ""}`);
+    return q.split(/\s+/).every((word) => hay.includes(phonetic(word)));
   });
 
   // Rename (only the person who just scanned holds the token)
@@ -2142,7 +2177,7 @@ export default function LabelPadhoApp({ initialScanId }: { initialScanId?: numbe
       const data = await res.json();
       if (!res.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Lookup failed");
       if (data.found && data.scan_id) {
-        setBarcodeMsg(data.source === "open_food_facts" ? "Found in Open Food Facts. Audit created and added to the catalog." : null);
+        setBarcodeMsg(data.source === "open_food_facts" ? "Found in Open Food Facts. Report created and added to the catalog." : null);
         setPendingBarcode(null);
         await viewPastScan(data.scan_id);
       } else {
@@ -2186,18 +2221,9 @@ export default function LabelPadhoApp({ initialScanId }: { initialScanId?: numbe
     };
   }, [searchQuery]);
 
-  // History tab filter (server-side, so it covers more than the 20 latest scans)
-  const [historyQuery, setHistoryQuery] = useState("");
-  useEffect(() => {
-    if (activeTab !== "history") return;
-    const timer = setTimeout(() => loadHistory(historyQuery), 300);
-    return () => clearTimeout(timer);
-  }, [historyQuery]);
-
   const loadDemoAudit = (demo: ProductAnalysis) => {
     setError(null);
     setAnalysis(demo);
-    setActiveTab("scan");
     setTimeout(() => {
       window.scrollTo({ top: 480, behavior: "smooth" });
     }, 100);
@@ -2216,10 +2242,9 @@ export default function LabelPadhoApp({ initialScanId }: { initialScanId?: numbe
       if (!res.ok) throw new Error("Could not load past scan details");
       const pastData: ProductAnalysis = await res.json();
       setAnalysis(pastData);
-      setActiveTab("scan");
-      window.scrollTo({ top: 400, behavior: "smooth" });
+        window.scrollTo({ top: 400, behavior: "smooth" });
     } catch (err: any) {
-      setError(err.message || "Failed to load past audit");
+      setError(err.message || "Could not open that report");
     } finally {
       setLoading(false);
     }
@@ -2237,20 +2262,6 @@ export default function LabelPadhoApp({ initialScanId }: { initialScanId?: numbe
     const target = analysis.scan_id ? `/p/${analysis.scan_id}` : "/";
     if (window.location.pathname !== target) window.history.replaceState(null, "", target);
   }, [analysis]);
-
-  const deletePastScan = async (e: React.MouseEvent, scanId: number) => {
-    e.stopPropagation();
-    try {
-      const res = await fetch(`${API_BASE}/api/history/${scanId}`, {
-        method: "DELETE",
-      });
-      if (res.ok) {
-        setHistoryList((prev) => prev.filter((item) => item.id !== scanId));
-      }
-    } catch (e) {
-      console.error("Delete failed", e);
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -2304,7 +2315,7 @@ export default function LabelPadhoApp({ initialScanId }: { initialScanId?: numbe
           Label<span className="text-emerald-600">Padho</span>
         </h1>
         <p className="mt-3 text-lg text-slate-600 max-w-2xl mx-auto">
-          Expose misleading packaged food claims, audit FSSAI compliance, and catch rigged calorie tables.
+          See what's really inside packaged food: misleading claims, hidden sugar and salt, and healthier swaps.
         </p>
         <p className="mt-2.5 text-xs text-slate-500 max-w-xl mx-auto">
           💡 Inspired by the consumer-awareness movements of changemakers like{" "}
@@ -2312,44 +2323,16 @@ export default function LabelPadhoApp({ initialScanId }: { initialScanId?: numbe
           <span className="font-semibold text-slate-700">Glucose Gal (Pratima Dixit)</span>.
         </p>
 
-        {/* Navigation Tabs */}
-        <div className="flex justify-center gap-3 mt-6">
-          <button
-            onClick={() => setActiveTab("scan")}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm transition cursor-pointer ${
-              activeTab === "scan"
-                ? "bg-slate-900 text-white shadow"
-                : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
-            }`}
-          >
-            <ScanLine className="w-4 h-4" />
-            Audit Scanner
-          </button>
-          <button
-            onClick={() => setActiveTab("history")}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm transition cursor-pointer ${
-              activeTab === "history"
-                ? "bg-slate-900 text-white shadow"
-                : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
-            }`}
-          >
-            <History className="w-4 h-4" />
-            Scan History
-          </button>
-        </div>
-
       </header>
 
-      {/* SCANNER VIEW */}
-      {activeTab === "scan" && (
-        <>
-          {/* Product Search — open any audit from the shared catalog (or a sample) without uploading */}
+      <>
+          {/* Product Search — open any saved report (or a sample) without uploading */}
           <section className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-6 mb-6">
             <label htmlFor="product-search" className="block text-sm font-semibold text-slate-900">
-              Already audited? Search instead of uploading
+              Already checked by someone? Search first
             </label>
             <p className="text-xs text-slate-500 mt-0.5 mb-3">
-              Every product anyone scans is saved to a shared catalog. Open its audit instantly, no photos needed.
+              Every product anyone checks is saved for everyone. Open its report instantly, no photos needed.
             </p>
             <div className="relative" ref={searchBoxRef}>
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-[1.4rem] -translate-y-1/2 pointer-events-none" />
@@ -2411,7 +2394,7 @@ export default function LabelPadhoApp({ initialScanId }: { initialScanId?: numbe
                     );
                     return (
                       <>
-                        <p className="px-4 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        <p className="px-4 pt-3 pb-1 text-[10px] font-bold text-slate-400">
                           {q ? "From the shared catalog" : "Recently scanned by the community"}
                         </p>
                         {q && searchLoading && searchResults.length === 0 ? (
@@ -2421,7 +2404,7 @@ export default function LabelPadhoApp({ initialScanId }: { initialScanId?: numbe
                         ) : (
                           <p className="px-4 py-2 text-xs text-slate-500">
                             {q && searchDone
-                              ? `No saved audit for "${searchQuery.trim()}" yet. Upload its label below and it will be searchable for everyone.`
+                              ? `No one has checked "${searchQuery.trim()}" yet. Upload its label below and it will be searchable for everyone.`
                               : !q
                               ? "Nothing scanned yet. Be the first!"
                               : null}
@@ -2430,8 +2413,8 @@ export default function LabelPadhoApp({ initialScanId }: { initialScanId?: numbe
 
                         {matchingDemos.length > 0 && (
                           <>
-                            <p className="px-4 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-t border-slate-100">
-                              Sample audits
+                            <p className="px-4 pt-3 pb-1 text-[10px] font-bold text-slate-400 border-t border-slate-100">
+                              Try a sample
                             </p>
                             <ul className="pb-2">
                               {matchingDemos.map(({ label, analysis: demo }) => (
@@ -2636,8 +2619,8 @@ export default function LabelPadhoApp({ initialScanId }: { initialScanId?: numbe
               {/* Additional Inputs */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                    Product Name <span className="normal-case">(Optional)</span>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Product name <span className="font-normal text-slate-500">(optional)</span>
                   </label>
                   <input
                     type="text"
@@ -2648,8 +2631,8 @@ export default function LabelPadhoApp({ initialScanId }: { initialScanId?: numbe
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                    How Much Will You Eat? <span className="normal-case">(Grams - Optional)</span>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    How much will you eat? <span className="font-normal text-slate-500">(grams, optional)</span>
                   </label>
                   <input
                     type="number"
@@ -2662,8 +2645,8 @@ export default function LabelPadhoApp({ initialScanId }: { initialScanId?: numbe
                   <p className="text-[11px] text-amber-700 mt-1">Important — usual serving size can be deceiving.</p>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                    Price You Paid <span className="normal-case">(₹ - Optional)</span>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Price you paid <span className="font-normal text-slate-500">(₹, optional)</span>
                   </label>
                   <input
                     type="number"
@@ -2697,7 +2680,7 @@ export default function LabelPadhoApp({ initialScanId }: { initialScanId?: numbe
                 ) : (
                   <>
                     <ShieldCheck className="w-5 h-5" />
-                    <span>Audit Food Label</span>
+                    <span>Check this label</span>
                   </>
                 )}
               </button>
@@ -2711,11 +2694,11 @@ export default function LabelPadhoApp({ initialScanId }: { initialScanId?: numbe
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 flex flex-col md:flex-row items-center justify-between gap-6">
                 <div>
                   <div className="flex flex-wrap items-center gap-2 mb-2">
-                    <span className="text-xs font-bold uppercase tracking-wider text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-md">
-                      Audit Result
+                    <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-md">
+                      Label report
                     </span>
                     {shown.category_display_name && (
-                      <span className="text-xs font-bold uppercase tracking-wider text-indigo-700 bg-indigo-50 border border-indigo-200/50 px-2.5 py-1 rounded-md">
+                      <span className="text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200/50 px-2.5 py-1 rounded-md">
                         🏷️ {shown.category_display_name}
                         {shown.sub_category_display_name && ` · ${shown.sub_category_display_name}`}
                       </span>
@@ -2804,9 +2787,9 @@ export default function LabelPadhoApp({ initialScanId }: { initialScanId?: numbe
                     >
                       <Scale className="w-3.5 h-3.5" /> Compare
                     </button>
+                    <ShareMenu analysis={shown} />
                   </div>
                   {translateError && <p className="text-xs text-red-600 mt-1">{translateError}</p>}
-                  <ShareButtons analysis={shown} />
                   {shown.scan_id && (
                     <div className="mt-3">
                       <ReportWrongData scanId={shown.scan_id} initialCount={shown.report_count ?? 0} />
@@ -2815,7 +2798,7 @@ export default function LabelPadhoApp({ initialScanId }: { initialScanId?: numbe
                 </div>
                 {shown.health_score && (
                   <div className="text-center bg-slate-50 border border-slate-200 px-6 py-4 rounded-xl flex-shrink-0 self-start md:self-center">
-                    <span className="text-xs text-slate-500 uppercase font-semibold">Health Score</span>
+                    <span className="text-xs text-slate-500 font-semibold">Health score</span>
                     <div className="text-4xl font-extrabold text-slate-900 mt-0.5">
                       {shown.health_score} <span className="text-lg text-slate-400 font-normal">/ 10</span>
                     </div>
@@ -2891,7 +2874,7 @@ export default function LabelPadhoApp({ initialScanId }: { initialScanId?: numbe
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
                   <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2 mb-4">
                     <ShieldAlert className="w-5 h-5 text-amber-500" />
-                    Front-of-Pack Claim Audit (FSSAI Check)
+                    Front-of-Pack Claims Check (FSSAI)
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {shown.claim_verifications.map((item, idx) => (
@@ -2908,7 +2891,7 @@ export default function LabelPadhoApp({ initialScanId }: { initialScanId?: numbe
                         <div className="flex items-center justify-between mb-2">
                           <span className="font-bold text-slate-900 text-sm">{item.claim}</span>
                           <span
-                            className={`text-xs px-2 py-0.5 rounded-full font-semibold uppercase ${
+                            className={`text-xs px-2 py-0.5 rounded-full font-semibold ${
                               item.status === "verified"
                                 ? "bg-emerald-100 text-emerald-800"
                                 : item.status === "misleading"
@@ -2995,7 +2978,7 @@ export default function LabelPadhoApp({ initialScanId }: { initialScanId?: numbe
                               {flag.ingredient_name}
                             </span>
                             <span
-                              className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded ${
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded ${
                                 flag.severity === "high"
                                   ? "bg-red-100 text-red-800"
                                   : flag.severity === "medium"
@@ -3034,7 +3017,7 @@ export default function LabelPadhoApp({ initialScanId }: { initialScanId?: numbe
                     <div className="p-4 bg-emerald-50/40 rounded-xl border border-emerald-100 space-y-2">
                       {shown.price_analysis.mrp_inr && (
                         <div className="flex justify-between items-center text-sm">
-                          <span className="text-slate-600">MRP (printed on pack):</span>
+                          <span className="text-slate-600">MRP on pack (read from photo):</span>
                           <span className="font-bold text-slate-900">₹{shown.price_analysis.mrp_inr}</span>
                         </div>
                       )}
@@ -3063,6 +3046,20 @@ export default function LabelPadhoApp({ initialScanId }: { initialScanId?: numbe
                         {shown.price_analysis.value_verdict}
                       </p>
                     </div>
+                  </div>
+                )}
+                {!shown.price_analysis && shown.extraction.mrp_inr && (
+                  <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                    <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2 mb-2">
+                      <DollarSign className="w-5 h-5 text-emerald-600" />
+                      Price
+                    </h3>
+                    <p className="text-sm text-slate-700">
+                      MRP on pack (read from photo): <span className="font-bold">₹{shown.extraction.mrp_inr}</span>
+                    </p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Enter the price you paid when checking a label to see cost per gram of protein.
+                    </p>
                   </div>
                 )}
 
@@ -3112,7 +3109,7 @@ export default function LabelPadhoApp({ initialScanId }: { initialScanId?: numbe
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {shown.educational_notes.map((note, idx) => (
                       <div key={idx} className="p-4 bg-blue-50/40 rounded-xl border border-blue-100">
-                        <span className="text-[10px] font-bold uppercase text-blue-700 tracking-wider">
+                        <span className="text-[10px] font-bold text-blue-700">
                           {note.triggered_by}
                         </span>
                         <h4 className="font-bold text-sm text-slate-900 mt-1">{note.title}</h4>
@@ -3124,144 +3121,19 @@ export default function LabelPadhoApp({ initialScanId }: { initialScanId?: numbe
               )}
             </section>
           )}
-        </>
-      )}
+      </>
 
-      {/* HISTORY VIEW */}
-      {activeTab === "history" && (
-        <section className="space-y-4">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold text-slate-900">Past Audits & Scans</h2>
-            <button
-              onClick={() => loadHistory(historyQuery)}
-              className="text-xs font-semibold text-slate-600 hover:text-slate-900 cursor-pointer"
-            >
-              Refresh
-            </button>
-          </div>
-
-          <div className="relative">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-            <input
-              type="search"
-              value={historyQuery}
-              onChange={(e) => setHistoryQuery(e.target.value)}
-              placeholder="Filter past scans by product or brand..."
-              aria-label="Filter past scans"
-              className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-400"
-            />
-          </div>
-
-          {historyLoading ? (
-            <div className="py-12 text-center text-slate-500 text-sm">
-              <div className="w-6 h-6 border-2 border-slate-900 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-              Loading history...
-            </div>
-          ) : historyList.length === 0 && historyQuery.trim() ? (
-            <div className="py-12 text-center bg-white border border-slate-200 rounded-2xl p-6">
-              <p className="text-slate-600 text-sm">No past scans match &ldquo;{historyQuery.trim()}&rdquo;.</p>
-            </div>
-          ) : historyList.length === 0 ? (
-            <div className="py-12 text-center bg-white border border-slate-200 rounded-2xl p-6">
-              <p className="text-slate-600 text-sm">No food labels audited yet.</p>
-              <button
-                onClick={() => setActiveTab("scan")}
-                className="mt-3 px-4 py-2 bg-emerald-600 text-white text-xs font-semibold rounded-lg hover:bg-emerald-700 cursor-pointer"
-              >
-                Scan Your First Label
-              </button>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {historyList.map((item) => (
-                <div
-                  key={item.id}
-                  onClick={() => viewPastScan(item.id)}
-                  className="bg-white border border-slate-200 hover:border-emerald-300 rounded-xl p-5 shadow-sm transition hover:shadow-md cursor-pointer relative group flex flex-col justify-between"
-                >
-                  <div>
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <h3 className="font-bold text-slate-900 text-base">{productTitle(item.brand, item.product_name, item.variant)}</h3>
-                        <p className="text-xs text-slate-500 mt-0.5">
-                          {new Date(item.created_at).toLocaleDateString("en-IN", {
-                            day: "numeric",
-                            month: "short",
-                            year: "numeric",
-                          })}
-                        </p>
-                      </div>
-                      {item.health_score && (
-                        <span className="text-xs font-extrabold px-2.5 py-1 rounded-md bg-slate-100 text-slate-800">
-                          {item.health_score}/10
-                        </span>
-                      )}
-                    </div>
-
-                    <p className="text-xs text-slate-600 mt-2 line-clamp-2">
-                      {item.one_line_summary}
-                    </p>
-
-                    {/* Micro badges */}
-                    <div className="flex flex-wrap gap-1.5 mt-3">
-                      {item.product_category && (
-                        <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded font-medium border border-indigo-100">
-                          {item.product_category.replace(/_/g, " ")}
-                        </span>
-                      )}
-                      {item.price_inr && (
-                        <span className="text-[10px] bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-medium">
-                          ₹{item.price_inr}
-                        </span>
-                      )}
-                      {item.protein_per_serving_g && (
-                        <span className="text-[10px] bg-emerald-50 text-emerald-800 px-2 py-0.5 rounded font-medium">
-                          {item.protein_per_serving_g}g Protein
-                        </span>
-                      )}
-                      {item.debunked_claims_count > 0 && (
-                        <span className="text-[10px] bg-red-100 text-red-800 px-2 py-0.5 rounded font-medium">
-                          {item.debunked_claims_count} False Claim
-                        </span>
-                      )}
-                      {item.flag_count > 0 && (
-                        <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-medium">
-                          {item.flag_count} Flagged Additive
-                        </span>
-                      )}
-                      {item.has_calorie_discrepancy && (
-                        <span className="text-[10px] bg-indigo-50 text-indigo-800 px-2 py-0.5 rounded font-medium">
-                          Calorie Discrepancy
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between pt-4 mt-2 border-t border-slate-100 text-xs">
-                    <span className="text-emerald-600 font-semibold flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
-                      View Full Audit <ArrowRight className="w-3.5 h-3.5" />
-                    </span>
-                    <button
-                      onClick={(e) => deletePastScan(e, item.id)}
-                      className="text-slate-400 hover:text-red-500 p-1 rounded transition"
-                      title="Delete record"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-      )}
-
-      <section className="mt-12 border-t border-slate-200 pt-6 text-center">
-        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Coming next</p>
-        <p className="mt-2 text-sm text-slate-600">
-          Shelf product leaderboards and instant barcode lookups to make healthier grocery decisions easier.
+      <footer className="mt-12 border-t border-slate-200 pt-6 text-center space-y-1.5">
+        <p className="text-xs font-semibold text-slate-500">Coming next</p>
+        <p className="text-sm text-slate-600">More Indian languages, and prices reported by shoppers near you.</p>
+        <p className="text-[11px] text-slate-400 pt-2">
+          General guidance from food labels, not medical advice. Some product data from{" "}
+          <a href="https://world.openfoodfacts.org" target="_blank" rel="noopener noreferrer" className="underline hover:text-slate-600">
+            Open Food Facts
+          </a>{" "}
+          contributors (ODbL).
         </p>
-      </section>
+      </footer>
     </main>
   );
 }

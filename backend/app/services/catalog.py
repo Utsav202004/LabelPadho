@@ -7,7 +7,7 @@ from sqlmodel import Session
 
 from app.models.db_models import ProductScan
 from app.models.schemas import LabelExtraction, ProductAnalysis
-from app.services.analyzer import Analyzer
+from app.services.analyzer import Analyzer  # noqa: F401 (kept for signature)
 
 logger = logging.getLogger(__name__)
 
@@ -24,13 +24,10 @@ def save_to_catalog(
     """
     Persist an audit and return (record, edit_token).
 
-    The saved copy is priced at MRP (a product fact). What a user paid is
-    personal (shop, city, offer), so it is shown to them but never stored.
+    What a user paid is personal (shop, city, offer), so the saved copy has
+    no price analysis; each viewer can add their own price.
     """
-    stored = analysis.model_copy(update={
-        "price_analysis": analyzer.price_analysis_for(extraction, None),
-        "data_source": source,
-    })
+    stored = analysis.model_copy(update={"price_analysis": None, "data_source": source})
     nutrition = extraction.nutrition_per_serving
     edit_token = secrets.token_urlsafe(24)
     record = ProductScan(
@@ -44,7 +41,7 @@ def save_to_catalog(
         net_weight_g=extraction.net_weight_g,
         barcode=extraction.barcode,
         source=source,
-        price_inr=extraction.mrp_inr,
+        price_inr=None,
         health_score=analysis.health_score,
         one_line_summary=analysis.one_line_summary,
         protein_per_serving_g=nutrition.protein_g,
@@ -52,7 +49,7 @@ def save_to_catalog(
         calories_per_serving=nutrition.energy_kcal,
         sodium_per_serving_mg=nutrition.sodium_mg,
         sugar_per_serving_g=nutrition.sugar_g,
-        price_per_g_protein=stored.price_analysis.price_per_g_protein if stored.price_analysis else None,
+        price_per_g_protein=None,
         flag_count=len(analysis.ingredient_flags),
         debunked_claims_count=sum(c.status == "debunked" for c in analysis.claim_verifications),
         misleading_claims_count=sum(c.status == "misleading" for c in analysis.claim_verifications),

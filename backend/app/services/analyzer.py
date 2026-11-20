@@ -623,22 +623,22 @@ class Analyzer:
         self, extraction: LabelExtraction, price_paid_inr: float | None
     ) -> PriceAnalysis | None:
         """
-        Price analysis from the best available price.
+        Value-for-money analysis from the price the user actually paid.
 
-        - MRP is printed on every Indian pack (Legal Metrology rules), so it is a
-          fact about the PRODUCT and safe to store in the shared catalog.
-        - What someone actually paid varies by shop/city/offer, so it is only
-          used for that person's view (and never saved).
+        MRP read from a photo can be misread (small print, glare, stickers) or
+        missing, so it is never used for calculations — only shown as info.
+        What someone paid is personal, so it is used for their view and never
+        stored in the shared catalog.
         """
-        mrp = extraction.mrp_inr if extraction.mrp_inr and extraction.mrp_inr > 0 else None
         paid = price_paid_inr if price_paid_inr and price_paid_inr > 0 else None
-        price = paid or mrp
-        if not price:
+        if not paid:
             return None
-        analysis = self._analyze_price(extraction, price)
-        discount = round((mrp - paid) / mrp * 100, 1) if (mrp and paid and paid < mrp) else None
+        mrp = extraction.mrp_inr if extraction.mrp_inr and extraction.mrp_inr > 0 else None
+        analysis = self._analyze_price(extraction, paid)
+        # Only claim a discount when it's plausible; a misread MRP would make this nonsense
+        discount = round((mrp - paid) / mrp * 100, 1) if (mrp and paid < mrp and paid >= mrp * 0.3) else None
         return analysis.model_copy(update={
-            "price_source": "paid" if paid else "mrp",
+            "price_source": "paid",
             "mrp_inr": mrp,
             "price_paid_inr": paid,
             "discount_pct": discount,

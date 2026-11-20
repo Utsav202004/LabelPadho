@@ -71,3 +71,27 @@ def display_name(brand: str | None, product_name: str | None, variant: str | Non
     if variant and squash(variant) not in squash(name):
         name = f"{name} ({variant})"
     return name
+
+
+# Romanised Hindi/English spellings vary a lot ("bhujiya"/"bhujia", "maggi"/"magi").
+_PHONETIC = [("ph", "f"), ("ee", "i"), ("oo", "u"), ("y", "i"), ("w", "v"), ("z", "j"), ("q", "k")]
+
+
+def phonetic(token: str) -> str:
+    """Normalise a word for fuzzy matching: lowercase, letters/digits only, common Hinglish swaps, no doubled letters."""
+    t = re.sub(r"[^a-z0-9]", "", token.lower())
+    for a, b in _PHONETIC:
+        t = t.replace(a, b)
+    return re.sub(r"(.)\1+", r"\1", t)
+
+
+_LEGAL_WORDS = {"pvt", "ltd", "limited", "private", "company", "co", "holdings", "industries", "india",
+                "the", "beverages", "foods", "food", "inc", "llp", "corp", "corporation", "&", "and"}
+
+
+def clean_brand(brand: str | None) -> str | None:
+    """'Pepsico India Holdings PVT LTD' → 'Pepsico', 'The Coca-Cola Company' → 'Coca-Cola'."""
+    if not brand:
+        return None
+    words = [w for w in brand.replace(".", " ").split() if w.lower().strip(",") not in _LEGAL_WORDS]
+    return " ".join(words).strip(" ,-") or brand.strip()

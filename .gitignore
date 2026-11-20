@@ -46,3 +46,6 @@ uploads/
 # Local SQLite scan history & TS build cache
 *.db
 *.tsbuildinfo
+
+# Private interview notes
+interview-notes.md

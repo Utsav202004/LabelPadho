@@ -70,18 +70,23 @@ def _protein_bar(**extra):
     )
 
 
-def test_price_uses_mrp_when_user_gives_no_price():
-    price = Analyzer().price_analysis_for(_protein_bar(mrp_inr=100), None)
-    assert price.price_source == "mrp"
-    assert price.price_inr == 100
-    assert price.price_per_g_protein == pytest.approx(5.0)
+def test_mrp_alone_never_drives_price_maths():
+    """MRP read from a photo can be wrong, so without a price paid there is no price analysis."""
+    assert Analyzer().price_analysis_for(_protein_bar(mrp_inr=100), None) is None
 
 
-def test_price_paid_overrides_mrp_and_reports_discount():
+def test_price_paid_drives_maths_and_mrp_is_info_only():
     price = Analyzer().price_analysis_for(_protein_bar(mrp_inr=100), 80)
     assert price.price_source == "paid"
     assert price.price_inr == 80
-    assert price.discount_pct == 20.0
+    assert price.price_per_g_protein == pytest.approx(4.0)
+    assert (price.mrp_inr, price.discount_pct) == (100, 20.0)
+
+
+def test_implausible_discount_from_misread_mrp_is_hidden():
+    # MRP misread as 1000 (should be 10.00) must not claim "98% below MRP"
+    price = Analyzer().price_analysis_for(_protein_bar(mrp_inr=1000), 20)
+    assert price.discount_pct is None
 
 
 def test_no_price_at_all_gives_no_price_analysis():
@@ -296,7 +301,7 @@ def test_reports_are_counted_and_admin_queue_is_protected(client, monkeypatch):
     assert c.get(f"/api/history/{ids['Bourbon']}").status_code in (200, 500)  # seeded rows have empty JSON
 
     assert c.get("/api/reports").status_code == 404  # disabled without an admin key
-    monkeypatch.setenv("REPORTS_ADMIN_KEY", "admin-secret")
+    monkeypatch.setenv("ADMIN_KEY", "admin-secret")
     assert c.get("/api/reports").status_code == 401
     rows = c.get("/api/reports", headers={"X-Admin-Key": "admin-secret"}).json()
     assert rows[0]["product_name"] == "Bourbon" and rows[0]["reason"] == "wrong_nutrition"
@@ -338,3 +343,29 @@ def test_translation_changes_prose_only_and_is_cached(client, monkeypatch):
     assert len(calls) == 1  # second request served from cache
     session.refresh(scan)
     assert "hi" in _json.loads(scan.translations_json)
+
+
+
+def test_delete_requires_scanner_token_or_admin(client, monkeypatch):
+    c, ids = client
+    url = f"/api/history/{ids['Marie Gold']}"
+    assert c.delete(url).status_code == 403  # anonymous can't wipe the shared catalog
+    monkeypatch.setenv("ADMIN_KEY", "admin-secret")
+    assert c.delete(url, headers={"X-Admin-Key": "nope"}).status_code == 403
+    assert c.delete(url, headers={"X-Admin-Key": "admin-secret"}).status_code == 200
+
+    own = f"/api/history/{ids['Bourbon']}"
+    assert c.delete(own, headers={"X-Edit-Token": "secret-token-123"}).status_code == 200
+
+
+def test_seed_duplicate_detection_and_brand_cleanup():
+    from app.services.naming import clean_brand
+    from app.services.seed import is_duplicate, product_identity
+
+    assert clean_brand("Pepsico India Holdings PVT LTD") == "Pepsico"
+    assert clean_brand("The Coca-Cola Company") == "Coca-Cola"
+    seen = {product_identity("Britannia", "Marie Gold Biscuit"), product_identity("Maggi", "Maggi Masala Noodles")}
+    assert is_duplicate(product_identity("Britannia", "Britannia Vita Marie Gold Biscuits"), seen)
+    assert is_duplicate(product_identity("Maggi", "Maggie Masala Noodles"), seen)
+    assert not is_duplicate(product_identity("Britannia", "Good Day Cashew Cookies"), seen)
+    assert not is_duplicate(product_identity("Haldiram's", "Aloo Bhujia"), seen)

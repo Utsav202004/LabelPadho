@@ -16,6 +16,7 @@ import re
 import httpx
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.services.naming import clean_brand
 from app.models.schemas import (
     ExtractedIngredient,
     LabelExtraction,
@@ -189,7 +190,7 @@ def to_extraction(product: dict, barcode: str) -> LabelExtraction | None:
     if serving_g and all(getattr(per_serving, f) is None for f in ("energy_kcal", "sugar_g", "sodium_mg")):
         per_serving = NutritionInfo(serving_size_g=serving_g)  # sanitize step derives it from per-100g
 
-    brand = (product.get("brands") or "").split(",")[0].strip() or None
+    brand = clean_brand((product.get("brands") or "").split(",")[0].strip() or None)
     name = clean_off_name(product.get("product_name_en") or product.get("product_name") or "")
     category, sub = _category(product.get("categories_tags") or [], name)
     ingredients_text = product.get("ingredients_text_en") or product.get("ingredients_text") or ""

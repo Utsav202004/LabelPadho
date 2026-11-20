@@ -13,6 +13,8 @@ re-running Gemini extraction.
 """
 
 import logging
+import re
+from difflib import SequenceMatcher
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -22,12 +24,17 @@ from sqlmodel import Session, select
 
 from app.core.db import get_session
 from app.models.db_models import ProductScan, ProductScanRead
+import httpx
+
+from app.core.admin import require_admin
 from app.core.rate_limit import SlidingWindowLimiter
 from app.models.schemas import SUB_CATEGORIES
 from app.services import open_food_facts as off
 from app.services.analyzer import Analyzer, sanitize_extraction
 from app.services.catalog import save_to_catalog
+from app.services.naming import phonetic
 from app.services.open_food_facts import is_valid_barcode
+from app.services.seed import seed_from_open_food_facts
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -68,7 +75,55 @@ def search_scans(session: Session, q: str, limit: int) -> list[ProductScan]:
         return []
 
     query = apply_search_filter(select(ProductScan), q).order_by(ProductScan.created_at.desc())
-    return _unique_products(session.exec(query.limit(limit * 5)).all(), limit)
+    exact = _unique_products(session.exec(query.limit(limit * 5)).all(), limit)
+    if len(exact) >= limit:
+        return exact
+    # Not enough exact hits: fall back to typo/transliteration-tolerant matching
+    seen = {_product_key(s) for s in exact}
+    fuzzy = [s for s in fuzzy_search(session, q, limit) if _product_key(s) not in seen]
+    return (exact + fuzzy)[:limit]
+
+
+# ---------------------------------------------------------------------------
+# Fuzzy search: "bhujiya" → Bhujia, "magi" → Maggi, "lays" → Lay's, "burbon" → Bourbon
+# ---------------------------------------------------------------------------
+# Indian product names are typed in many romanised spellings, so we normalise
+# common Hinglish variations, then compare tokens with an edit-distance ratio.
+# This runs in Python over the latest few thousand catalog rows, which is
+# plenty for this catalog; at scale the same idea moves into Postgres
+# (pg_trgm trigram indexes) or a search engine.
+
+FUZZY_CANDIDATES = 3000
+
+
+def _token_score(query_token: str, name_tokens: list[str]) -> float:
+    best = 0.0
+    for nt in name_tokens:
+        if len(query_token) >= 3 and nt.startswith(query_token):
+            return 1.0  # prefix: "bisc" → "biscuit"
+        best = max(best, SequenceMatcher(None, query_token, nt).ratio())
+    return best
+
+
+def fuzzy_score(query: str, scan: ProductScan) -> float:
+    q_tokens = [phonetic(t) for t in query.split() if phonetic(t)]
+    name = f"{scan.brand or ''} {scan.product_name or ''} {scan.variant or ''}"
+    n_tokens = [phonetic(t) for t in re.split(r"[\s\-/()]+", name) if phonetic(t)]
+    if not q_tokens or not n_tokens:
+        return 0.0
+    scores = [_token_score(t, n_tokens) for t in q_tokens]
+    # every word must roughly match something; average decides the ranking
+    return 0.0 if min(scores) < 0.75 else sum(scores) / len(scores)
+
+
+def fuzzy_search(session: Session, q: str, limit: int) -> list[ProductScan]:
+    candidates = session.exec(
+        select(ProductScan).order_by(ProductScan.created_at.desc()).limit(FUZZY_CANDIDATES)
+    ).all()
+    scored = [(fuzzy_score(q, s), s) for s in _unique_products(candidates, FUZZY_CANDIDATES)]
+    scored = [(score, s) for score, s in scored if score >= 0.8]
+    scored.sort(key=lambda pair: pair[0], reverse=True)  # stable: ties keep newest first
+    return [s for _, s in scored[:limit]]
 
 
 def _product_key(scan: ProductScan) -> tuple[str, str, str]:
@@ -213,3 +268,17 @@ async def lookup_barcode(
     analysis = _analyzer.analyze(extraction)
     record, _ = save_to_catalog(session, _analyzer, extraction, analysis, source="open_food_facts")
     return BarcodeResponse(found=True, source="open_food_facts", scan_id=record.id)
+
+
+
+@router.post("/admin/seed-open-food-facts")
+async def seed_catalog(
+    target: int = Query(100, ge=1, le=300),
+    session: Session = Depends(get_session),
+    _admin: None = Depends(require_admin),
+):
+    """Admin: add popular Indian products from Open Food Facts (skips ones already in the catalog)."""
+    try:
+        return await seed_from_open_food_facts(session, target=target)
+    except httpx.HTTPError as e:
+        raise HTTPException(status_code=502, detail=f"Open Food Facts unavailable: {e}")

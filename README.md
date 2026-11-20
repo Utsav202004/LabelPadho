@@ -9,11 +9,11 @@
 
 ## What it does
 
-Take up to three kinds of photos (nutrition table, ingredients, front of pack + any claim panels) and LabelPadho returns a full audit:
+Take up to three kinds of photos (nutrition table, ingredients, front of pack + any claim panels) and LabelPadho returns a plain-language report:
 
 | Feature | What the shopper sees | Real example |
 |---|---|---|
-| **Claim audit** | Every marketing claim checked against ingredients and FSSAI rules: verified, misleading or debunked | "Classic Butter" popcorn: butter is **0.16%** of the pack |
+| **Claim check** | Every marketing claim checked against ingredients and FSSAI rules: verified, misleading or debunked | "Classic Butter" popcorn: butter is **0.16%** of the pack |
 | **100% ingredient breakdown** | Donut chart of what you're actually eating, built from declared QUID % and the nutrition table | Popcorn 65%, palmolein/cottonseed oil ~29% |
 | **Portion reality check** | What your real portion contains, not the brand's tiny "serving" | A 150g chips pack with a 30g serving → full pack = 1,500mg sodium |
 | **Calorie math check** | Atwater formula (4/4/9 kcal per g) re-computes energy to catch rigged tables | Flags labels whose printed kcal doesn't match their macros |
@@ -22,16 +22,16 @@ Take up to three kinds of photos (nutrition table, ingredients, front of pack + 
 | **Shelf ranking** | Ranked against products **on the same shelf**, with healthier options | "Ranked #3 of 4 in Popcorn" |
 | **"Is this OK for me?"** | Pick a profile (diabetic, high BP, gym, kids, pregnancy) for a personal verdict | High BP + Maggi → "Better to avoid: 1,232mg sodium per 100g" |
 | **Compare side by side** | Any two products per 100g, with the better value highlighted on each row | Maggi vs Lay's: sugar, sodium, saturated fat, protein, ₹/g protein |
-| **Value for money** | Price per gram of protein / fibre, from the MRP printed on the pack (or what you paid) | "You paid 20% below MRP" |
+| **Value for money** | Price per gram of protein / fibre from the price you paid (MRP read from the photo is shown, never used in maths) | ₹2.10 per g protein vs ~₹1.2 for eggs |
 | **Desi swaps + home recipes** | Cheaper whole-food alternatives and quick Indian recipes in the same craving category | Roasted chana instead of a ₹150 protein bar |
-| **हिंदी में पढ़ें** | One tap shows the audit's verdicts and explanations in simple Hindi | Numbers and scores stay exactly the same |
-| **Share on WhatsApp** | Every audit has its own link with a preview card (score, product, worst finding) | `labelpadho.utsavgoyal.tech/p/123` |
+| **हिंदी में पढ़ें** | One tap shows the report's verdicts and explanations in simple Hindi | Numbers and scores stay exactly the same |
+| **Share on WhatsApp** | Every report has its own link with a preview card (score, product, worst finding) | `labelpadho.utsavgoyal.tech/p/123` |
 
 ### Search or scan a barcode instead of photographing
 Every product anyone scans goes into a **shared catalog**. The next person can:
-- **Search** "bourbon", "bhujia" or "ragi chips" and open the full audit instantly, with no photos and no AI call. Suggestions show before you type.
-- **Scan the barcode** with the phone camera (or type the digits). If the product is in our catalog, it opens instantly. If not, LabelPadho checks **[Open Food Facts](https://world.openfoodfacts.org)**, the free open food database, builds the audit from its data and adds it to the catalog. If nobody has the product yet, you photograph the label once and the barcode is saved for everyone after you.
-- **Report wrong data** on any audit, so the community catalog stays accurate.
+- **Search** "bourbon", "bhujia" or "ragi chips" and open the full report instantly, with no photos and no AI call. Search is **typo- and Hinglish-tolerant**: "bhujiya" finds Bhujia, "magi" finds Maggi, "lays" finds Lay's. Suggestions show before you type.
+- **Scan the barcode** with the phone camera (Android and iPhone), a photo of the barcode, or typed digits. If the product is in our catalog, it opens instantly. If not, LabelPadho checks **[Open Food Facts](https://world.openfoodfacts.org)**, the free open food database, builds the report from its data and adds it to the catalog. If nobody has the product yet, you photograph the label once and the barcode is saved for everyone after you.
+- **Report wrong data** on any report, so the community catalog stays accurate.
 
 ---
 
@@ -75,13 +75,16 @@ flowchart TD
 
 ## Engineering decisions worth talking about
 
-- **AI for perception, code for judgement.** The LLM never computes a number the user sees. That removes hallucinated maths and makes the core logic testable without network calls (63 Pytest tests).
+- **AI for perception, code for judgement.** The LLM never computes a number the user sees. That removes hallucinated maths and makes the core logic testable without network calls (72 Pytest tests).
 - **A score that can't be gamed, and explains itself.** Brands shrink the "serving" to make numbers look small, so the score is computed per 100g using UK FSA traffic-light bands (close to FSSAI's proposed HFSS limits). Every adjustment is returned as a reason ("−2 high sodium 1,232mg/100g"), and the one-line verdict is generated from the same reasons, so it can never contradict the score.
 - **Cheapest data source first.** Barcode lookup goes: own catalog (free, instant) → Open Food Facts (free API, no AI) → photos + Gemini (slow, uses quota). Each step saves its result, so every product costs at most one AI call, ever.
 - **Protecting a free-tier AI budget.** Endpoints that spend Gemini quota have per-client sliding-window rate limits. The client IP is read from the right-most `X-Forwarded-For` entry, which the proxy adds, because left-most entries can be spoofed. Translations are cached per product, so each one costs one call, ever.
 - **Translation that can't change the facts.** Only prose is sent for Hindi translation, and it's mapped back by key. Scores, numbers and flags never pass through the model.
 - **Self-healing extraction.** Vision models sometimes read the wrong column of a nutrition table. Physical impossibility checks (macros heavier than the serving, more than 9 kcal per gram) detect it, and the values are rebuilt from per-100g data. A missing pack weight is derived from servings × serving size.
-- **A shared catalog that respects what is shared.** The **MRP** is printed on every Indian pack by law, so it is a fact about the product and is stored. **What you paid** depends on shop, city and offers, so it is used only for your own view and never saved.
+- **Never compute with numbers you can't trust.** MRP read from a photo can be misread (small print, glare, price stickers), so it is shown as information only. Value-for-money maths uses only the price the user types, which is personal and never saved to the shared catalog.
+- **Search built for how Indians type product names.** Exact matches first; if there aren't enough, a fuzzy pass normalises Hinglish spellings (y→i, ee→i, doubled letters) and compares words by edit distance, requiring every word to roughly match. It runs over the latest few thousand products, which fits this catalog; at scale the same idea moves to Postgres trigram indexes or a search engine.
+- **Day-one catalog without AI cost.** ~100 of the most-scanned Indian products are seeded from Open Food Facts with strict filters (Indian barcodes only, contributor-verified nutrition and ingredients, completeness score, fuzzy de-duplication of pack sizes and spelling variants), each run through the same engine.
+- **A shared catalog needs write protection.** Rename and delete require the scanner's edit token or an admin key, so nobody can vandalise products others rely on.
 - **Fixing AI mistakes without accounts.** When a scan finishes, the server returns a random **edit token** that only the scanner's browser keeps. Renaming requires that token (compared in constant time), so whoever scanned a product can fix a misread name ("Nenimems" → "Nenimemi's"), but strangers can't vandalise the shared catalog.
 - **Fair comparisons.** Nine categories, each split into shelf-level sub-categories (biscuits vs chocolates vs mithai). Alternatives compare within the same shelf and fall back to the wider category only when the shelf is empty.
 - **Context-aware warnings.** "The full packet has 1,500mg sodium" makes sense for chips, not for a ketchup bottle or a bag of atta. Multi-use packs (condiments, staples, dairy, packs over 400g) are judged per serving instead.
@@ -94,7 +97,7 @@ flowchart TD
 
 | Layer | Tech | Hosting (all free tier) |
 |---|---|---|
-| Frontend | Next.js 15, React 19, TypeScript, Tailwind CSS 4, `next/og` preview images, browser BarcodeDetector | Vercel |
+| Frontend | Next.js 15, React 19, TypeScript, Tailwind CSS 4, `next/og` preview images, BarcodeDetector (+ WebAssembly polyfill for iPhone) | Vercel |
 | Backend | Python 3.12, FastAPI, Pydantic v2, SQLModel / SQLAlchemy | Render |
 | AI | Google GenAI SDK: Gemini Flash multimodal, structured output | Gemini API |
 | Database | Postgres (serverless) in production, SQLite locally | Neon |
@@ -105,17 +108,18 @@ flowchart TD
 
 | Method | Endpoint | Purpose |
 |---|---|---|
-| `POST` | `/api/analyze` | Upload label photos (+ optional price paid, portion) and get a full audit, `scan_id` and `edit_token` |
-| `GET` | `/api/products/search?q=` | Multi-word search over brand, product and variant (latest audit per product) |
+| `POST` | `/api/analyze` | Upload label photos (+ optional price paid, portion) and get a full report, `scan_id` and `edit_token` |
+| `GET` | `/api/products/search?q=` | Multi-word search over brand, product and variant (latest report per product) |
 | `GET` | `/api/products/suggestions` | Recently scanned unique products (search dropdown) |
 | `GET` | `/api/products/{id}/alternatives` | Shelf ranking and healthier products in the same sub-category |
 | `GET` | `/api/products/barcode/{code}` | Catalog → Open Food Facts → "photograph the label" |
 | `POST` | `/api/translate` | Audit prose in Hindi (cached per product) |
-| `POST` | `/api/history/{id}/report` | Flag an audit as wrong |
-| `GET` | `/api/reports` | Review queue (needs `REPORTS_ADMIN_KEY`) |
-| `GET` | `/api/history` · `/api/history/{id}` | Past scans · full saved audit |
+| `POST` | `/api/history/{id}/report` | Flag a report as wrong |
+| `GET` | `/api/reports` | Review queue (needs `ADMIN_KEY`) |
+| `POST` | `/api/admin/seed-open-food-facts` | Add popular Indian products from Open Food Facts (needs `ADMIN_KEY`) |
+| `GET` | `/api/history` · `/api/history/{id}` | Past scans · full saved report |
 | `PATCH` | `/api/history/{id}` | Fix brand / product / variant (requires the scanner's `edit_token`) |
-| `DELETE` | `/api/history/{id}` | Remove a scan |
+| `DELETE` | `/api/history/{id}` | Remove a scan (scanner's `edit_token` or `ADMIN_KEY`) |
 
 Interactive docs: `http://localhost:8000/docs`
 
@@ -154,13 +158,22 @@ Free hosts like Render wipe the disk on every deploy, so production uses Neon:
 2. Add it as `DATABASE_URL` in Render → **Environment**, then redeploy.
 3. Startup logs `Database initialized (hosted Postgres via DATABASE_URL)`. Tables and new columns are created automatically.
 
+### Seed the catalog (optional, recommended)
+Adds ~100 popular Indian packaged foods from Open Food Facts, skipping ones already present:
+```bash
+# locally (writes to DATABASE_URL, or local SQLite if unset)
+cd backend && ../.venv/bin/python scripts/seed_open_food_facts.py --target 100
+# or on the deployed server
+curl -X POST -H "X-Admin-Key: $ADMIN_KEY" "https://<your-backend>/api/admin/seed-open-food-facts?target=100"
+```
+
 ### Optional settings
 | Variable | Default | Purpose |
 |---|---|---|
 | `RATE_LIMIT_SCANS_PER_HOUR` | 15 | Label scans per client per hour (0 = off) |
 | `RATE_LIMIT_TRANSLATIONS_PER_HOUR` | 30 | Uncached Hindi translations per client per hour |
 | `OFF_USER_AGENT` | `LabelPadho/1.0` | Identify your app to Open Food Facts, e.g. `LabelPadho/1.0 (you@example.com)` |
-| `REPORTS_ADMIN_KEY` | unset | Enables `GET /api/reports` (send it as the `X-Admin-Key` header) |
+| `ADMIN_KEY` | unset | Enables admin endpoints (reports queue, seeding, deletes). Send it as the `X-Admin-Key` header |
 
 ---
 
