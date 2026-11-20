@@ -35,7 +35,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import analyze, health, history, products
-from app.core.db import init_db
+from app.core.db import IS_SQLITE, init_db
 
 # Configure logging so we can see what's happening
 logging.basicConfig(
@@ -58,7 +58,10 @@ async def lifespan(app: FastAPI):
     # --- Startup ---
     logger.info("🚀 LabelPadho API starting up...")
     init_db()
-    logger.info("✅ Database initialized (SQLite / SQLModel)")
+    logger.info(
+        "✅ Database initialized (%s)",
+        "local SQLite" if IS_SQLITE else "hosted Postgres via DATABASE_URL",
+    )
     logger.info("✅ Flagged additives database loaded")
     logger.info("✅ Natural alternatives database loaded")
     yield

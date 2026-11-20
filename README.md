@@ -55,6 +55,7 @@ flowchart TD
 - **Strict Decoupling of AI & Logic**: The AI only transcribes the label into structured data. 100% of the mathematical ratios (price-per-gram-protein, serving multipliers) and regulatory risk flags are computed by a deterministic Python engine. This eliminates LLM hallucination in calculations.
 - **Automated Serving Size Normalization**: Detects artificially small serving sizes and computes total-package intake reality (e.g., exposing when a snack fulfills 75% of daily sodium in one bag).
 - **Personalized Nutrition Learning Engine**: Tracks topics taught to each user (e.g. sodium retention, trans-fat labeling loopholes) to avoid repetitive preaching as user nutritional literacy grows.
+- **Shared Crowd-Sourced Product Catalog**: Every label audited once is persisted to a hosted Postgres database and becomes instantly searchable by every user — repeat lookups skip the multimodal LLM call entirely (sub-second instead of ~20s). Multi-word, case-insensitive search across name and brand, de-duplicated to the latest audit per product.
 - **Automated Test Coverage**: Complete Pytest test suite testing edge cases (hidden trans fats, multi-serving math, additive matching) in isolation without mocking external network calls.
 
 ---
@@ -64,6 +65,7 @@ flowchart TD
 - **Backend**: Python 3.12+, FastAPI, Pydantic v2, pydantic-settings, Uvicorn
 - **AI/LLM**: Google GenAI SDK (Gemini 2.5 Flash multimodal)
 - **Validation & Math**: Pydantic, NumPy/Pandas ready
+- **Database**: SQLModel (SQLAlchemy) on Postgres (Neon serverless, free tier) with SQLite fallback for local dev
 - **Testing**: Pytest
 - **DevOps**: Docker, Docker Compose
 
@@ -98,3 +100,20 @@ source .venv/bin/activate
 export PYTHONPATH=backend
 pytest backend/tests/test_analyzer.py -v
 ```
+
+### 4. Shared Product Catalog (Free Hosted Postgres)
+Without `DATABASE_URL`, scans are saved to a local SQLite file — fine for development, but free app hosts (Render) wipe the disk on every deploy/restart. To make every scanned product permanently searchable by all users:
+
+1. Create a free project at [neon.tech](https://neon.tech) (no card required; the database sleeps when idle and wakes in about a second on the next request — check Neon's pricing page for current storage limits).
+2. Copy the connection string from the Neon dashboard (**Connect** → it looks like `postgresql://user:pass@ep-xxxx.aws.neon.tech/neondb?sslmode=require`).
+3. Set it as `DATABASE_URL`:
+   - Locally: add it to `.env`.
+   - On Render: **Service → Environment → Add Environment Variable**, then redeploy.
+4. On startup the backend logs `Database initialized (hosted Postgres via DATABASE_URL)` and creates its tables automatically.
+
+| Layer | Free service |
+|-------|--------------|
+| Frontend | Vercel (Hobby) |
+| Backend API | Render (Free web service) |
+| Database | Neon (Free plan) |
+| AI | Gemini API free tier |
