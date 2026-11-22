@@ -178,7 +178,29 @@ def clean_off_name(raw: str) -> str | None:
     return cleaned
 
 
+# Product types that are unambiguous from the name and often mis-tagged in OFF
+NAME_FIRST_RULES: list[tuple[str, ProductCategory, str]] = [
+    ("mayonnaise", ProductCategory.CONDIMENT_SAUCE, "mayo_dressing"),
+    ("mayo", ProductCategory.CONDIMENT_SAUCE, "mayo_dressing"),
+    ("ketchup", ProductCategory.CONDIMENT_SAUCE, "ketchup_sauce"),
+    ("sauce", ProductCategory.CONDIMENT_SAUCE, "ketchup_sauce"),
+    ("chutney", ProductCategory.CONDIMENT_SAUCE, "pickle_chutney"),
+    ("pickle", ProductCategory.CONDIMENT_SAUCE, "pickle_chutney"),
+    ("jam", ProductCategory.CONDIMENT_SAUCE, "jam_spread"),
+]
+
+
+def name_first_category(name: str | None) -> tuple[ProductCategory, str] | None:
+    words = re.findall(r"[a-z]+", (name or "").lower())
+    for keyword, category, sub in NAME_FIRST_RULES:
+        if keyword in words:
+            return category, sub
+    return None
+
+
 def _category(tags: list[str], name: str | None = None) -> tuple[ProductCategory, str | None]:
+    if (by_name := name_first_category(name)) is not None:
+        return by_name
     # OFF tags are often generic ("plant-based-foods"), so the product name helps too
     joined = (" ".join(tags or []) + " " + (name or "").replace(" ", "-")).lower()
     for keyword, category, sub in CATEGORY_RULES:

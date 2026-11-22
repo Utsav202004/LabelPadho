@@ -1,0 +1,418 @@
+{
+  "generated": "2026-11-22",
+  "catalog_size": 214,
+  "queue": [
+    {
+      "id": 186,
+      "title": "Horlicks Classic Malt",
+      "shelf": "Soda & Soft Drink",
+      "score": 3,
+      "verdict": "Classic Malt scores low (3/10), mainly for liquid sugar 46.0g/100ml (very high).",
+      "why_score": [
+        "Liquid sugar 46.0g/100ml (very high)",
+        "Long ingredient list (11)"
+      ],
+      "sugar_per_100g": 46.0,
+      "sodium_mg_per_100g": 0,
+      "protein_per_100g": 11.0,
+      "misleading_claims": [],
+      "hero_ingredient_insight": "Over 19.3% of this beverage is pure sugar. You are drinking predominantly flavored liquid sugar with minimal active nutrition.",
+      "ingredient_concerns": [],
+      "healthier_swaps": [
+        "Fresh Tender Coconut Water (1 whole coconut (~250ml))",
+        "Spiced Chaas / Buttermilk (1 tall glass (250ml))"
+      ],
+      "data_source": "open_food_facts",
+      "surprise_score": 9.21,
+      "links": {
+        "x": "https://labelpadho.utsavgoyal.tech/p/186?utm_source=x&utm_medium=social&utm_campaign=label_of_the_day",
+        "linkedin": "https://labelpadho.utsavgoyal.tech/p/186?utm_source=linkedin&utm_medium=social&utm_campaign=label_of_the_day",
+        "instagram": "https://labelpadho.utsavgoyal.tech/p/186?utm_source=instagram&utm_medium=social&utm_campaign=label_of_the_day",
+        "whatsapp": "https://labelpadho.utsavgoyal.tech/p/186?utm_source=whatsapp&utm_medium=social&utm_campaign=label_of_the_day"
+      }
+    },
+    {
+      "id": 203,
+      "title": "Hindustan Unilever Boost",
+      "shelf": "Soda & Soft Drink",
+      "score": 2,
+      "verdict": "Boost scores low (2/10), mainly for liquid sugar 35.0g/100ml (very high) and high sodium 450mg/100ml.",
+      "why_score": [
+        "Liquid sugar 35.0g/100ml (very high)",
+        "High sodium 450mg/100ml"
+      ],
+      "sugar_per_100g": 35.0,
+      "sodium_mg_per_100g": 450,
+      "protein_per_100g": 7.5,
+      "misleading_claims": [],
+      "hero_ingredient_insight": "Over 23.5% of this beverage is pure sugar. You are drinking predominantly flavored liquid sugar with minimal active nutrition.",
+      "ingredient_concerns": [],
+      "healthier_swaps": [
+        "Unsweetened Iced Tea (1 glass (250ml))",
+        "Fresh Tender Coconut Water (1 whole coconut (~250ml))"
+      ],
+      "data_source": "open_food_facts",
+      "surprise_score": 6.5,
+      "links": {
+        "x": "https://labelpadho.utsavgoyal.tech/p/203?utm_source=x&utm_medium=social&utm_campaign=label_of_the_day",
+        "linkedin": "https://labelpadho.utsavgoyal.tech/p/203?utm_source=linkedin&utm_medium=social&utm_campaign=label_of_the_day",
+        "instagram": "https://labelpadho.utsavgoyal.tech/p/203?utm_source=instagram&utm_medium=social&utm_campaign=label_of_the_day",
+        "whatsapp": "https://labelpadho.utsavgoyal.tech/p/203?utm_source=whatsapp&utm_medium=social&utm_campaign=label_of_the_day"
+      }
+    },
+    {
+      "id": 5,
+      "title": "M.O.M. (Meal of the Moment) Ragi Chips Peri Peri",
+      "shelf": "Savory Snack",
+      "score": 6,
+      "verdict": "Ragi Chips Peri Peri has marketing claims (\"CHOLESTEROL FREE\") that may be misleading.",
+      "why_score": [],
+      "sugar_per_100g": 3.0,
+      "sodium_mg_per_100g": 700,
+      "protein_per_100g": 9.0,
+      "misleading_claims": [
+        "\"High Protein\": FSSAI requires at least 20% of energy to come from protein to legally claim 'High Protein' (or 12% for 'Source of Protein'). In this product, protein provides only 6.8% of total calories (1.8g protein = 7 kcal out of 106 kcal). This is an inflated protein claim.",
+        "\"Source of Protein\": Technically meets FSSAI minimum (9.0g / 100g, or 9.0% by weight), but provides only 1.8g protein per actual serving (20g). Almost any grain or nut-based snack has 5-8% protein naturally. This is marketing a basic nutrient as a feature."
+      ],
+      "hero_ingredient_insight": null,
+      "ingredient_concerns": [
+        "\"CHOLESTEROL FREE\" — potentially misleading"
+      ],
+      "healthier_swaps": [
+        "Air-Popped Popcorn (3 cups, lightly salted)",
+        "Roasted Peanuts (30g (small handful))"
+      ],
+      "data_source": "label_scan",
+      "surprise_score": 6.43,
+      "links": {
+        "x": "https://labelpadho.utsavgoyal.tech/p/5?utm_source=x&utm_medium=social&utm_campaign=label_of_the_day",
+        "linkedin": "https://labelpadho.utsavgoyal.tech/p/5?utm_source=linkedin&utm_medium=social&utm_campaign=label_of_the_day",
+        "instagram": "https://labelpadho.utsavgoyal.tech/p/5?utm_source=instagram&utm_medium=social&utm_campaign=label_of_the_day",
+        "whatsapp": "https://labelpadho.utsavgoyal.tech/p/5?utm_source=whatsapp&utm_medium=social&utm_campaign=label_of_the_day"
+      }
+    },
+    {
+      "id": 110,
+      "title": "Hellmann's Real Mayonnaise",
+      "shelf": "Candies & Toffees",
+      "score": 2,
+      "verdict": "Real Mayonnaise scores low (2/10), mainly for trans fat 0.5g/100g and high sodium 722mg/100g.",
+      "why_score": [
+        "Trans fat 0.5g/100g",
+        "High sodium 722mg/100g",
+        "Long ingredient list (12)"
+      ],
+      "sugar_per_100g": 4.0,
+      "sodium_mg_per_100g": 722,
+      "protein_per_100g": 0.0,
+      "misleading_claims": [],
+      "hero_ingredient_insight": null,
+      "ingredient_concerns": [],
+      "healthier_swaps": [
+        "Medjool Dates with Almonds/Walnuts (2 dates + 4 nuts)",
+        "Dark Chocolate (75%+ Cacao) (20g (2 squares))"
+      ],
+      "data_source": "open_food_facts",
+      "surprise_score": 6.14,
+      "links": {
+        "x": "https://labelpadho.utsavgoyal.tech/p/110?utm_source=x&utm_medium=social&utm_campaign=label_of_the_day",
+        "linkedin": "https://labelpadho.utsavgoyal.tech/p/110?utm_source=linkedin&utm_medium=social&utm_campaign=label_of_the_day",
+        "instagram": "https://labelpadho.utsavgoyal.tech/p/110?utm_source=instagram&utm_medium=social&utm_campaign=label_of_the_day",
+        "whatsapp": "https://labelpadho.utsavgoyal.tech/p/110?utm_source=whatsapp&utm_medium=social&utm_campaign=label_of_the_day"
+      }
+    },
+    {
+      "id": 173,
+      "title": "Haldiram's Soan Papdi (Indian Sweets",
+      "shelf": "Biscuits & Cookies",
+      "score": 2,
+      "verdict": "Haldiram's Soan Papdi (Indian Sweets) scores low (2/10), mainly for high sugar 46.1g/100g and high sodium 3200mg/100g.",
+      "why_score": [
+        "High sugar 46.1g/100g",
+        "High sodium 3200mg/100g",
+        "Saturated fat 13.8g/100g (high)"
+      ],
+      "sugar_per_100g": 46.1,
+      "sodium_mg_per_100g": 3200,
+      "protein_per_100g": 5.3,
+      "misleading_claims": [],
+      "hero_ingredient_insight": null,
+      "ingredient_concerns": [],
+      "healthier_swaps": [
+        "Fresh Cut Figs / Anjeer (2-3 fresh or soaked figs)",
+        "Peanut Chikki (1 small piece (20g))"
+      ],
+      "data_source": "open_food_facts",
+      "surprise_score": 6.0,
+      "links": {
+        "x": "https://labelpadho.utsavgoyal.tech/p/173?utm_source=x&utm_medium=social&utm_campaign=label_of_the_day",
+        "linkedin": "https://labelpadho.utsavgoyal.tech/p/173?utm_source=linkedin&utm_medium=social&utm_campaign=label_of_the_day",
+        "instagram": "https://labelpadho.utsavgoyal.tech/p/173?utm_source=instagram&utm_medium=social&utm_campaign=label_of_the_day",
+        "whatsapp": "https://labelpadho.utsavgoyal.tech/p/173?utm_source=whatsapp&utm_medium=social&utm_campaign=label_of_the_day"
+      }
+    },
+    {
+      "id": 142,
+      "title": "Kissan Sweet & Spicy Sauce",
+      "shelf": "Ketchups & Sauces",
+      "score": 3,
+      "verdict": "Kissan Sweet & Spicy Sauce scores low (3/10), mainly for high sugar 30.3g/100g and high sodium 728000mg/100g.",
+      "why_score": [
+        "High sugar 30.3g/100g",
+        "High sodium 728000mg/100g",
+        "1 ingredient concern(s): PRESERVATIVE-E211"
+      ],
+      "sugar_per_100g": 30.3,
+      "sodium_mg_per_100g": 728000,
+      "protein_per_100g": 0.5,
+      "misleading_claims": [],
+      "hero_ingredient_insight": null,
+      "ingredient_concerns": [
+        "Forms benzene when combined with Vitamin C"
+      ],
+      "healthier_swaps": [
+        "Fresh Tomato Salsa (2 tablespoons)",
+        "Mint-Coriander Chutney (2 tablespoons)"
+      ],
+      "data_source": "open_food_facts",
+      "surprise_score": 6.0,
+      "links": {
+        "x": "https://labelpadho.utsavgoyal.tech/p/142?utm_source=x&utm_medium=social&utm_campaign=label_of_the_day",
+        "linkedin": "https://labelpadho.utsavgoyal.tech/p/142?utm_source=linkedin&utm_medium=social&utm_campaign=label_of_the_day",
+        "instagram": "https://labelpadho.utsavgoyal.tech/p/142?utm_source=instagram&utm_medium=social&utm_campaign=label_of_the_day",
+        "whatsapp": "https://labelpadho.utsavgoyal.tech/p/142?utm_source=whatsapp&utm_medium=social&utm_campaign=label_of_the_day"
+      }
+    },
+    {
+      "id": 27,
+      "title": "Britannia Jimjam (57",
+      "shelf": "Crackers & Puffs",
+      "score": 2,
+      "verdict": "Jimjam (57) scores low (2/10), mainly for high sodium 211000mg/100g and high sugar 32.9g/100g.",
+      "why_score": [
+        "High sodium 211000mg/100g",
+        "High sugar 32.9g/100g",
+        "Ultra-processed: 18 ingredients"
+      ],
+      "sugar_per_100g": 32.9,
+      "sodium_mg_per_100g": 211000,
+      "protein_per_100g": 5.0,
+      "misleading_claims": [],
+      "hero_ingredient_insight": null,
+      "ingredient_concerns": [],
+      "healthier_swaps": [
+        "Roasted Chana (Black Gram) (50g (1 handful))",
+        "Air-Popped Popcorn (3 cups, lightly salted)"
+      ],
+      "data_source": "open_food_facts",
+      "surprise_score": 6.0,
+      "links": {
+        "x": "https://labelpadho.utsavgoyal.tech/p/27?utm_source=x&utm_medium=social&utm_campaign=label_of_the_day",
+        "linkedin": "https://labelpadho.utsavgoyal.tech/p/27?utm_source=linkedin&utm_medium=social&utm_campaign=label_of_the_day",
+        "instagram": "https://labelpadho.utsavgoyal.tech/p/27?utm_source=instagram&utm_medium=social&utm_campaign=label_of_the_day",
+        "whatsapp": "https://labelpadho.utsavgoyal.tech/p/27?utm_source=whatsapp&utm_medium=social&utm_campaign=label_of_the_day"
+      }
+    },
+    {
+      "id": 35,
+      "title": "Kitkat Mini Chocolate Coated Wafer",
+      "shelf": "Crackers & Puffs",
+      "score": 4,
+      "verdict": "Kitkat Mini Chocolate Coated Wafer scores low (4/10), mainly for high sugar 35.1g/100g and saturated fat 24.5g/100g (high).",
+      "why_score": [
+        "High sugar 35.1g/100g",
+        "Saturated fat 24.5g/100g (high)",
+        "Long ingredient list (11)"
+      ],
+      "sugar_per_100g": 35.1,
+      "sodium_mg_per_100g": 97,
+      "protein_per_100g": 6.4,
+      "misleading_claims": [],
+      "hero_ingredient_insight": "Packaging prominently advertises 'Cocoa solids', but it constitutes only 4.5% of the product. The remaining 95.5% consists of bulk fillers (Sugar, Edible Vegetable Fats) with undeclared specific weights.",
+      "ingredient_concerns": [],
+      "healthier_swaps": [
+        "Roasted Makhana (Foxnuts) (30g (1 large bowl roasted in 1/2 tsp ghee/oil))",
+        "Roasted Chana (Black Gram) (50g (1 handful))"
+      ],
+      "data_source": "open_food_facts",
+      "surprise_score": 5.5,
+      "links": {
+        "x": "https://labelpadho.utsavgoyal.tech/p/35?utm_source=x&utm_medium=social&utm_campaign=label_of_the_day",
+        "linkedin": "https://labelpadho.utsavgoyal.tech/p/35?utm_source=linkedin&utm_medium=social&utm_campaign=label_of_the_day",
+        "instagram": "https://labelpadho.utsavgoyal.tech/p/35?utm_source=instagram&utm_medium=social&utm_campaign=label_of_the_day",
+        "whatsapp": "https://labelpadho.utsavgoyal.tech/p/35?utm_source=whatsapp&utm_medium=social&utm_campaign=label_of_the_day"
+      }
+    },
+    {
+      "id": 215,
+      "title": "Real Mixed Fruit",
+      "shelf": "Fruit Juices & Drinks",
+      "score": 6,
+      "verdict": "Real Mixed Fruit is okay in moderation. Watch out for sugar 13.1g/100ml without fruit fibre.",
+      "why_score": [
+        "Sugar 13.1g/100ml without fruit fibre"
+      ],
+      "sugar_per_100g": 13.1,
+      "sodium_mg_per_100g": null,
+      "protein_per_100g": 0.2,
+      "misleading_claims": [],
+      "hero_ingredient_insight": "Over 13.1% of this beverage is pure sugar. You are drinking predominantly flavored liquid sugar with minimal active nutrition.",
+      "ingredient_concerns": [],
+      "healthier_swaps": [
+        "Spiced Chaas / Buttermilk (1 tall glass (250ml))",
+        "Fresh Nimbu Pani (Lemon Water) (1 glass with rock salt / pinch of jaggery)"
+      ],
+      "data_source": "open_food_facts",
+      "surprise_score": 5.43,
+      "links": {
+        "x": "https://labelpadho.utsavgoyal.tech/p/215?utm_source=x&utm_medium=social&utm_campaign=label_of_the_day",
+        "linkedin": "https://labelpadho.utsavgoyal.tech/p/215?utm_source=linkedin&utm_medium=social&utm_campaign=label_of_the_day",
+        "instagram": "https://labelpadho.utsavgoyal.tech/p/215?utm_source=instagram&utm_medium=social&utm_campaign=label_of_the_day",
+        "whatsapp": "https://labelpadho.utsavgoyal.tech/p/215?utm_source=whatsapp&utm_medium=social&utm_campaign=label_of_the_day"
+      }
+    },
+    {
+      "id": 63,
+      "title": "Parle Agro Appy Fizz Appy Fizz",
+      "shelf": "Soft Drinks",
+      "score": 3,
+      "verdict": "Appy Fizz scores low (3/10), mainly for liquid sugar 12.9g/100ml (very high).",
+      "why_score": [
+        "Liquid sugar 12.9g/100ml (very high)",
+        "1 ingredient concern(s): preservative (INS 211)"
+      ],
+      "sugar_per_100g": 12.9,
+      "sodium_mg_per_100g": 21,
+      "protein_per_100g": 0.0,
+      "misleading_claims": [],
+      "hero_ingredient_insight": "Over 12.9% of this beverage is pure sugar. You are drinking predominantly flavored liquid sugar with minimal active nutrition.",
+      "ingredient_concerns": [
+        "Forms benzene when combined with Vitamin C"
+      ],
+      "healthier_swaps": [
+        "Spiced Chaas / Buttermilk (1 tall glass (250ml))",
+        "Fresh Nimbu Pani (Lemon Water) (1 glass with rock salt / pinch of jaggery)"
+      ],
+      "data_source": "open_food_facts",
+      "surprise_score": 5.0,
+      "links": {
+        "x": "https://labelpadho.utsavgoyal.tech/p/63?utm_source=x&utm_medium=social&utm_campaign=label_of_the_day",
+        "linkedin": "https://labelpadho.utsavgoyal.tech/p/63?utm_source=linkedin&utm_medium=social&utm_campaign=label_of_the_day",
+        "instagram": "https://labelpadho.utsavgoyal.tech/p/63?utm_source=instagram&utm_medium=social&utm_campaign=label_of_the_day",
+        "whatsapp": "https://labelpadho.utsavgoyal.tech/p/63?utm_source=whatsapp&utm_medium=social&utm_campaign=label_of_the_day"
+      }
+    },
+    {
+      "id": 11,
+      "title": "Maggi Hot & Sweet Tomato Chili Sauce",
+      "shelf": "Condiment & Sauce",
+      "score": 6,
+      "verdict": "Hot & Sweet Tomato Chili Sauce — no major red flags found.",
+      "why_score": [],
+      "sugar_per_100g": 33.3,
+      "sodium_mg_per_100g": 808,
+      "protein_per_100g": 0.4,
+      "misleading_claims": [],
+      "hero_ingredient_insight": null,
+      "ingredient_concerns": [],
+      "healthier_swaps": [
+        "Fresh Tomato Salsa (2 tablespoons)",
+        "Mint-Coriander Chutney (2 tablespoons)"
+      ],
+      "data_source": "label_scan",
+      "surprise_score": 5.0,
+      "links": {
+        "x": "https://labelpadho.utsavgoyal.tech/p/11?utm_source=x&utm_medium=social&utm_campaign=label_of_the_day",
+        "linkedin": "https://labelpadho.utsavgoyal.tech/p/11?utm_source=linkedin&utm_medium=social&utm_campaign=label_of_the_day",
+        "instagram": "https://labelpadho.utsavgoyal.tech/p/11?utm_source=instagram&utm_medium=social&utm_campaign=label_of_the_day",
+        "whatsapp": "https://labelpadho.utsavgoyal.tech/p/11?utm_source=whatsapp&utm_medium=social&utm_campaign=label_of_the_day"
+      }
+    },
+    {
+      "id": 141,
+      "title": "Yoga Bar Multigrain Energy BAR Chocolate Chunk NUT",
+      "shelf": "Chocolates",
+      "score": 6,
+      "verdict": "Multigrain Energy BAR Chocolate Chunk NUT is okay in moderation. Watch out for high sugar 30.9g/100g.",
+      "why_score": [
+        "High sugar 30.9g/100g",
+        "Long ingredient list (14)"
+      ],
+      "sugar_per_100g": 30.9,
+      "sodium_mg_per_100g": 110,
+      "protein_per_100g": 10.9,
+      "misleading_claims": [],
+      "hero_ingredient_insight": null,
+      "ingredient_concerns": [],
+      "healthier_swaps": [
+        "Dark Chocolate (75%+ Cacao) (20g (2 squares))",
+        "Fresh Cut Figs / Anjeer (2-3 fresh or soaked figs)"
+      ],
+      "data_source": "open_food_facts",
+      "surprise_score": 4.93,
+      "links": {
+        "x": "https://labelpadho.utsavgoyal.tech/p/141?utm_source=x&utm_medium=social&utm_campaign=label_of_the_day",
+        "linkedin": "https://labelpadho.utsavgoyal.tech/p/141?utm_source=linkedin&utm_medium=social&utm_campaign=label_of_the_day",
+        "instagram": "https://labelpadho.utsavgoyal.tech/p/141?utm_source=instagram&utm_medium=social&utm_campaign=label_of_the_day",
+        "whatsapp": "https://labelpadho.utsavgoyal.tech/p/141?utm_source=whatsapp&utm_medium=social&utm_campaign=label_of_the_day"
+      }
+    },
+    {
+      "id": 133,
+      "title": "Saffola Masala Veggie Twist Oats",
+      "shelf": "Oats & Muesli",
+      "score": 6,
+      "verdict": "Saffola Masala Veggie Twist Oats is okay in moderation. Watch out for high sodium 2283mg/100g.",
+      "why_score": [
+        "High sodium 2283mg/100g",
+        "Ultra-processed: 16 ingredients"
+      ],
+      "sugar_per_100g": 5.1,
+      "sodium_mg_per_100g": 2283,
+      "protein_per_100g": 8.8,
+      "misleading_claims": [],
+      "hero_ingredient_insight": null,
+      "ingredient_concerns": [],
+      "healthier_swaps": [
+        "Stone-Ground Whole-Wheat Atta (2 rotis)",
+        "Plain Oats (40g dry oats)"
+      ],
+      "data_source": "open_food_facts",
+      "surprise_score": 4.93,
+      "links": {
+        "x": "https://labelpadho.utsavgoyal.tech/p/133?utm_source=x&utm_medium=social&utm_campaign=label_of_the_day",
+        "linkedin": "https://labelpadho.utsavgoyal.tech/p/133?utm_source=linkedin&utm_medium=social&utm_campaign=label_of_the_day",
+        "instagram": "https://labelpadho.utsavgoyal.tech/p/133?utm_source=instagram&utm_medium=social&utm_campaign=label_of_the_day",
+        "whatsapp": "https://labelpadho.utsavgoyal.tech/p/133?utm_source=whatsapp&utm_medium=social&utm_campaign=label_of_the_day"
+      }
+    },
+    {
+      "id": 62,
+      "title": "Dabur Honey",
+      "shelf": "Jams & Spreads",
+      "score": 6,
+      "verdict": "Honey is okay in moderation. Watch out for high sugar 80.0g/100g.",
+      "why_score": [
+        "High sugar 80.0g/100g"
+      ],
+      "sugar_per_100g": 80.0,
+      "sodium_mg_per_100g": 17,
+      "protein_per_100g": 0.0,
+      "misleading_claims": [],
+      "hero_ingredient_insight": null,
+      "ingredient_concerns": [],
+      "healthier_swaps": [
+        "Fresh Tomato Salsa (2 tablespoons)",
+        "Mint-Coriander Chutney (2 tablespoons)"
+      ],
+      "data_source": "open_food_facts",
+      "surprise_score": 4.93,
+      "links": {
+        "x": "https://labelpadho.utsavgoyal.tech/p/62?utm_source=x&utm_medium=social&utm_campaign=label_of_the_day",
+        "linkedin": "https://labelpadho.utsavgoyal.tech/p/62?utm_source=linkedin&utm_medium=social&utm_campaign=label_of_the_day",
+        "instagram": "https://labelpadho.utsavgoyal.tech/p/62?utm_source=instagram&utm_medium=social&utm_campaign=label_of_the_day",
+        "whatsapp": "https://labelpadho.utsavgoyal.tech/p/62?utm_source=whatsapp&utm_medium=social&utm_campaign=label_of_the_day"
+      }
+    }
+  ]
+}

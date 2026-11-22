@@ -106,3 +106,25 @@ class ProductScanRead(SQLModel):
     debunked_claims_count: int
     misleading_claims_count: int
     has_calorie_discrepancy: bool
+
+
+class AnalyticsEvent(SQLModel, table=True):
+    """
+    Anonymous product-usage event (first-party analytics).
+
+    No IP address, user agent or account is stored: only what happened, which
+    campaign/source brought the visitor (UTM tags), and a random per-tab
+    session id so funnels can be counted.
+    """
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
+    name: str = Field(index=True)  # visit, search, report_view, scan_submit, share, ...
+    session_id: Optional[str] = Field(default=None, index=True)
+    product_id: Optional[int] = Field(default=None, index=True)
+    utm_source: Optional[str] = Field(default=None, index=True)
+    utm_medium: Optional[str] = Field(default=None)
+    utm_campaign: Optional[str] = Field(default=None)
+    referrer_host: Optional[str] = Field(default=None)
+    detail: Optional[str] = Field(default=None)  # e.g. search text, share channel, profile
+    value: Optional[int] = Field(default=None)  # e.g. number of search results

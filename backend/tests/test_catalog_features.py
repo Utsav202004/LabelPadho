@@ -418,3 +418,61 @@ def test_saved_reports_are_cleaned_of_emojis_and_unnamed_seeds(monkeypatch):
     # label scans keep the catalog name (the source of truth after any rename)
     assert _json.loads(rows["Bourbon"].full_analysis_json)["extraction"]["product_name"] == "Bourbon"
     assert "✅" not in rows["Bourbon"].full_analysis_json
+
+
+# --- First-party analytics ----------------------------------------------------------
+
+def test_events_are_recorded_and_stats_are_admin_only(client, monkeypatch):
+    c, ids = client
+    from app.api.routes.analytics import event_limiter
+    event_limiter.reset()
+
+    assert c.post("/api/events", json={"name": "made_up"}).status_code == 422
+    for sid, src in [("s1", "LinkedIn"), ("s2", "x"), ("s3", None)]:
+        assert c.post("/api/events", json={"name": "visit", "session_id": sid, "utm_source": src}).status_code == 204
+    c.post("/api/events", json={"name": "search", "session_id": "s1", "detail": "Bhujiya", "value": 3})
+    c.post("/api/events", json={"name": "search", "session_id": "s2", "detail": "coke zero", "value": 0})
+    c.post("/api/events", json={"name": "report_view", "session_id": "s1", "product_id": ids["Bourbon"]})
+    c.post("/api/events", json={"name": "share", "session_id": "s1", "detail": "whatsapp"})
+
+    assert c.get("/api/admin/stats").status_code == 404  # hidden without ADMIN_KEY
+    monkeypatch.setenv("ADMIN_KEY", "admin-secret")
+    stats = c.get("/api/admin/stats", headers={"X-Admin-Key": "admin-secret"}).json()
+    assert stats["visitors"] == 3 and stats["engaged_visitors"] == 2
+    assert stats["traffic_sources"] == {"linkedin": 1, "x": 1, "direct": 1}
+    assert stats["searches_with_no_results"] == {"coke zero": 1}
+    assert stats["top_products_viewed"][0]["name"] == "Britannia Bourbon"
+    assert stats["shares_by_channel"] == {"whatsapp": 1}
+
+
+def test_crowd_sourced_unit_errors_and_drink_powders_are_repaired():
+    # Sodium in grams entered as mg: 728000 mg/100g is impossible (salt is 39.3% sodium)
+    sauce = LabelExtraction(
+        product_name="Sweet & Spicy Sauce", product_category=ProductCategory.CONDIMENT_SAUCE,
+        nutrition_per_100g=NutritionInfo(serving_size_g=100, sugar_g=30.3, sodium_mg=728000),
+        nutrition_per_serving=NutritionInfo(serving_size_g=15),
+    )
+    fixed = sanitize_extraction(sauce)
+    assert fixed.nutrition_per_100g.sodium_mg == 728.0
+    assert fixed.nutrition_per_serving.sodium_mg == pytest.approx(109.2, abs=0.1)
+
+    # A malt drink powder filed as a soft drink is judged as packaged food, not "per 100ml"
+    powder = LabelExtraction(
+        product_name="Classic Malt", product_category=ProductCategory.BEVERAGE_SODA, sub_category="soft_drink",
+        nutrition_per_100g=NutritionInfo(serving_size_g=100, energy_kcal=377, sugar_g=46),
+    )
+    fixed = sanitize_extraction(powder)
+    assert fixed.product_category == ProductCategory.GENERAL_PACKAGED and fixed.sub_category is None
+    assert "100ml" not in " ".join(f.label for f in Analyzer().analyze(fixed).score_factors)
+
+    # Ready drinks stay drinks
+    cola = LabelExtraction(product_category=ProductCategory.BEVERAGE_SODA,
+                           nutrition_per_100g=NutritionInfo(serving_size_g=100, energy_kcal=42, sugar_g=10.6))
+    assert sanitize_extraction(cola).product_category == ProductCategory.BEVERAGE_SODA
+
+
+def test_condiment_names_win_over_vague_tags():
+    from app.services.open_food_facts import _category
+
+    assert _category(["en:confectioneries"], "Real Mayonnaise")[1] == "mayo_dressing"
+    assert _category(["en:biscuits"], "Bourbon Biscuit")[1] == "biscuit_cookie"  # unaffected

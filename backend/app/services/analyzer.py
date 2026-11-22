@@ -198,6 +198,20 @@ def _scale_from_100g(per_100g: NutritionInfo, serving: NutritionInfo, serving_g:
     })
 
 
+MAX_SODIUM_MG_PER_G = 393  # pure salt (NaCl) is 39.3% sodium
+
+
+def _fix_sodium_units(nutrition: NutritionInfo | None, grams: float | None) -> NutritionInfo | None:
+    """Repair sodium recorded in the wrong unit; drop it if it can't be repaired. Returns the same object if fine."""
+    if not nutrition or not grams or nutrition.sodium_mg is None:
+        return nutrition
+    limit = grams * MAX_SODIUM_MG_PER_G
+    if nutrition.sodium_mg <= limit:
+        return nutrition
+    repaired = nutrition.sodium_mg / 1000
+    return nutrition.model_copy(update={"sodium_mg": round(repaired, 1) if repaired <= limit else None})
+
+
 def sanitize_extraction(extraction: LabelExtraction) -> LabelExtraction:
     """
     Repair common, detectable extraction mistakes before any analysis runs.
@@ -209,6 +223,8 @@ def sanitize_extraction(extraction: LabelExtraction) -> LabelExtraction:
     2. Per-serving nutrients missing but a per-100g column and serving size
        are present → derive per-serving values.
     3. Net weight missing but servings x serving size known → derive it.
+    4. Sodium in the wrong unit (grams entered as mg) → repaired or dropped.
+    5. Drink powders/syrups filed as ready drinks → judged as packaged food.
 
     Idempotent: running it on an already-clean extraction changes nothing.
     """
@@ -216,6 +232,29 @@ def sanitize_extraction(extraction: LabelExtraction) -> LabelExtraction:
     serving_g = serving.serving_size_g
     per_100g = extraction.nutrition_per_100g
     update: dict = {}
+
+    # Sodium in grams entered as milligrams (common in crowd-sourced data):
+    # pure salt is 39.3% sodium, so no food can exceed 393 mg sodium per gram.
+    fixed_100 = _fix_sodium_units(per_100g, 100)
+    if fixed_100 is not per_100g:
+        update["nutrition_per_100g"] = per_100g = fixed_100
+    if serving_g:
+        fixed_serving = _fix_sodium_units(serving, serving_g)
+        if fixed_serving is not serving:
+            update["nutrition_per_serving"] = serving = fixed_serving
+
+    # Drink powders and syrups (Horlicks, Boost, Rooh Afza) are not ready-to-drink:
+    # their per-100g values describe the powder, so judging them "per 100ml of drink"
+    # would be wrong. Ready drinks are well under 100 kcal per 100ml.
+    if extraction.product_category in (ProductCategory.BEVERAGE_SODA, ProductCategory.BEVERAGE_JUICE):
+        kcal_100 = None
+        if per_100g and per_100g.energy_kcal is not None:
+            kcal_100 = per_100g.energy_kcal
+        elif serving.energy_kcal is not None and serving_g:
+            kcal_100 = serving.energy_kcal * 100 / serving_g
+        if kcal_100 is not None and kcal_100 > 250:
+            update["product_category"] = ProductCategory.GENERAL_PACKAGED
+            update["sub_category"] = None
 
     # Consistent display casing ("BOURBON" → "Bourbon")
     for field in ("product_name", "brand", "variant"):
@@ -225,7 +264,7 @@ def sanitize_extraction(extraction: LabelExtraction) -> LabelExtraction:
             update[field] = cleaned
 
     # Sub-category must belong to the chosen category, otherwise drop it
-    if extraction.sub_category is not None:
+    if extraction.sub_category is not None and "sub_category" not in update:
         category = extraction.product_category.value if extraction.product_category else "general_packaged"
         key = extraction.sub_category.strip().lower()
         valid = key if key in SUB_CATEGORIES.get(category, {}) else None

@@ -261,6 +261,77 @@ function saveEditToken(scanId: number, token: string) {
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const MAX_CLAIM_PHOTOS = 4;
 
+// ============================================================
+// First-party analytics: anonymous events to our own backend.
+// No cookies, no IPs, no personal data: a random per-tab session id,
+// the campaign tags (utm_*) the visitor arrived with, and what they did.
+// ============================================================
+
+const SESSION_KEY = "labelpadho_session";
+const UTM_KEY = "labelpadho_utm";
+
+function safeSession(): Storage | null {
+  try {
+    return typeof window !== "undefined" ? window.sessionStorage : null;
+  } catch {
+    return null;
+  }
+}
+
+// Remember how this visitor arrived, before the address bar is rewritten to /p/<id>
+function captureArrival() {
+  const store = safeSession();
+  if (!store || store.getItem(UTM_KEY)) return;
+  const params = new URLSearchParams(window.location.search);
+  let referrer: string | null = null;
+  try {
+    const host = document.referrer ? new URL(document.referrer).hostname : "";
+    referrer = host && host !== window.location.hostname ? host.replace(/^www\./, "") : null;
+  } catch {
+    /* unparsable referrer */
+  }
+  store.setItem(
+    UTM_KEY,
+    JSON.stringify({
+      utm_source: params.get("utm_source"),
+      utm_medium: params.get("utm_medium"),
+      utm_campaign: params.get("utm_campaign"),
+      referrer_host: referrer,
+    })
+  );
+}
+
+function sessionId(): string | null {
+  const store = safeSession();
+  if (!store) return null;
+  let id = store.getItem(SESSION_KEY);
+  if (!id) {
+    id = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    store.setItem(SESSION_KEY, id);
+  }
+  return id;
+}
+
+type TrackExtra = { product_id?: number | null; detail?: string | null; value?: number | null };
+
+function track(name: string, extra: TrackExtra = {}) {
+  try {
+    const arrival = JSON.parse(safeSession()?.getItem(UTM_KEY) || "{}");
+    fetch(`${API_BASE}/api/events`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, session_id: sessionId(), ...arrival, ...extra }),
+      keepalive: true,
+    }).catch(() => {});
+  } catch {
+    /* analytics must never break the app */
+  }
+}
+
+// Share links carry their channel, so visits from shares can be counted
+const shareUrl = (scanId: number, source: string) =>
+  `${typeof window !== "undefined" ? window.location.origin : ""}/p/${scanId}?utm_source=${source}&utm_medium=share`;
+
 // Pre-computed instant demo audit for recruiters or quick testing
 const DEMO_AUDIT: ProductAnalysis = {
   extraction: {
@@ -1529,14 +1600,15 @@ function ShareMenu({ analysis }: { analysis: ProductAnalysis }) {
   }, [open]);
 
   if (!analysis.scan_id) return null;
-  const url = typeof window !== "undefined" ? `${window.location.origin}/p/${analysis.scan_id}` : "";
+  const scanId = analysis.scan_id;
   const title = productTitle(analysis.extraction.brand, analysis.extraction.product_name, analysis.extraction.variant);
   const text = `${title} scores ${analysis.health_score ?? "?"}/10 on LabelPadho: ${analysis.one_line_summary}`;
   const canNativeShare = typeof navigator !== "undefined" && "share" in navigator;
 
   const copy = async () => {
+    track("share", { product_id: scanId, detail: "copy_link" });
     try {
-      await navigator.clipboard.writeText(url);
+      await navigator.clipboard.writeText(shareUrl(scanId, "copied_link"));
       setCopied(true);
       setTimeout(() => {
         setCopied(false);
@@ -1548,8 +1620,9 @@ function ShareMenu({ analysis }: { analysis: ProductAnalysis }) {
   };
   const more = async () => {
     setOpen(false);
+    track("share", { product_id: scanId, detail: "native" });
     try {
-      await navigator.share({ title, text, url });
+      await navigator.share({ title, text, url: shareUrl(scanId, "native_share") });
     } catch {
       /* cancelled */
     }
@@ -1569,7 +1642,17 @@ function ShareMenu({ analysis }: { analysis: ProductAnalysis }) {
       </button>
       {open && (
         <div role="menu" className="absolute z-20 mt-1 w-48 bg-white border border-slate-200 rounded-xl shadow-lg py-1">
-          <a role="menuitem" href={`https://wa.me/?text=${encodeURIComponent(`${text}\n${url}`)}`} target="_blank" rel="noopener noreferrer" onClick={() => setOpen(false)} className={item}>
+          <a
+            role="menuitem"
+            href={`https://wa.me/?text=${encodeURIComponent(`${text}\n${shareUrl(scanId, "whatsapp")}`)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => {
+              track("share", { product_id: scanId, detail: "whatsapp" });
+              setOpen(false);
+            }}
+            className={item}
+          >
             <MessageCircle className="w-4 h-4 text-[#25D366]" /> WhatsApp
           </a>
           <button role="menuitem" type="button" onClick={copy} className={item}>
@@ -1624,6 +1707,7 @@ function ReportWrongData({ scanId, initialCount }: { scanId: number; initialCoun
       if (!res.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Could not send report");
       setCount(data.report_count);
       setStatus("sent");
+      track("report_wrong_data", { product_id: scanId, detail: reason });
       setOpen(false);
     } catch (e: any) {
       setMessage(e.message);
@@ -1940,7 +2024,10 @@ function BarcodeScanner({ onCode, onClose }: { onCode: (code: string) => void; o
   );
 }
 
-export default function LabelPadhoApp({ initialScanId }: { initialScanId?: number } = {}) {
+export default function LabelPadhoApp({
+  initialScanId,
+  initialAnalysis,
+}: { initialScanId?: number; initialAnalysis?: ProductAnalysis | null } = {}) {
   
   // Upload inputs
   const [nutritionFile, setNutritionFile] = useState<File | null>(null);
@@ -1992,7 +2079,19 @@ export default function LabelPadhoApp({ initialScanId }: { initialScanId?: numbe
   const [loading, setLoading] = useState(false);
   const [loadingMsg, setLoadingMsg] = useState("Preparing label photos...");
   const [error, setError] = useState<string | null>(null);
-  const [analysis, setAnalysis] = useState<ProductAnalysis | null>(null);
+  const [analysis, setAnalysis] = useState<ProductAnalysis | null>(initialAnalysis ?? null);
+
+  // Analytics: remember the arrival source before the URL is rewritten, then log the visit
+  useState(() => {
+    if (typeof window !== "undefined") captureArrival();
+    return null;
+  });
+  useEffect(() => {
+    track("visit");
+  }, []);
+  useEffect(() => {
+    if (analysis) track("report_view", { product_id: analysis.scan_id ?? null, detail: analysis.scan_id ? null : "sample" });
+  }, [analysis]);
 
   useEffect(() => {
     if (!loading) {
@@ -2100,7 +2199,10 @@ export default function LabelPadhoApp({ initialScanId }: { initialScanId?: numbe
 
   // Health profile: nothing pre-selected; the shopper picks one per product
   const [profile, setProfile] = useState<ProfileId | null>(null);
-  const changeProfile = (p: ProfileId | null) => setProfile(p);
+  const changeProfile = (p: ProfileId | null) => {
+    setProfile(p);
+    if (p) track("profile_select", { product_id: analysis?.scan_id ?? null, detail: p });
+  };
 
   // Compare panel
   const [compareOpen, setCompareOpen] = useState(false);
@@ -2123,6 +2225,7 @@ export default function LabelPadhoApp({ initialScanId }: { initialScanId?: numbe
       setLang("en");
       return;
     }
+    track("hindi_toggle", { product_id: analysis.scan_id ?? null });
     if (hindi) {
       setLang("hi");
       return;
@@ -2158,6 +2261,7 @@ export default function LabelPadhoApp({ initialScanId }: { initialScanId?: numbe
       const res = await fetch(`${API_BASE}/api/products/barcode/${code}`);
       const data = await res.json();
       if (!res.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Lookup failed");
+      track("barcode_lookup", { product_id: data.scan_id ?? null, detail: data.found ? data.source : "not_found" });
       if (data.found && data.scan_id) {
         setBarcodeMsg(data.source === "open_food_facts" ? "Found in Open Food Facts. Report created and added to the catalog." : null);
         setPendingBarcode(null);
@@ -2189,7 +2293,11 @@ export default function LabelPadhoApp({ initialScanId }: { initialScanId?: numbe
           `${API_BASE}/api/products/search?q=${encodeURIComponent(q)}`,
           { signal: controller.signal }
         );
-        if (res.ok) setSearchResults(await res.json());
+        if (res.ok) {
+          const results = await res.json();
+          setSearchResults(results);
+          track("search", { detail: q, value: results.length });
+        }
         setSearchDone(true);
       } catch (e: any) {
         if (e?.name !== "AbortError") console.error("Product search failed", e);
@@ -2234,7 +2342,8 @@ export default function LabelPadhoApp({ initialScanId }: { initialScanId?: numbe
 
   // Shared link (/p/123): open that audit on load
   useEffect(() => {
-    if (initialScanId) viewPastScan(initialScanId);
+    // The server already sent the report for /p/<id>; only fetch if it couldn't
+    if (initialScanId && !initialAnalysis) viewPastScan(initialScanId);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialScanId]);
 
@@ -2254,6 +2363,7 @@ export default function LabelPadhoApp({ initialScanId }: { initialScanId?: numbe
 
     setLoading(true);
     setError(null);
+    track("scan_submit");
 
     const formData = new FormData();
     formData.append("nutrition_label", nutritionFile);
@@ -2276,6 +2386,7 @@ export default function LabelPadhoApp({ initialScanId }: { initialScanId?: numbe
       }
 
       setAnalysis(data.analysis);
+      track("scan_success", { product_id: data.scan_id ?? null });
       setPendingBarcode(null);
       setBarcodeMsg(null);
       if (data.scan_id && data.edit_token) {
@@ -2764,7 +2875,10 @@ export default function LabelPadhoApp({ initialScanId }: { initialScanId?: numbe
                     </button>
                     <button
                       type="button"
-                      onClick={() => setCompareOpen((o) => !o)}
+                      onClick={() => {
+                        if (!compareOpen) track("compare_open", { product_id: analysis?.scan_id ?? null });
+                        setCompareOpen((o) => !o);
+                      }}
                       className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 flex items-center gap-1.5 cursor-pointer"
                     >
                       <Scale className="w-3.5 h-3.5" /> Compare

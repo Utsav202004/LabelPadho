@@ -90,6 +90,7 @@ def init_db():
     add_missing_columns()
     standardize_existing_names()
     clean_saved_reports()
+    recheck_seeded_reports()
 
 
 def add_missing_columns():
@@ -194,6 +195,56 @@ def clean_saved_reports():
         if changed or removed:
             session.commit()
             logger.info("Cleaned %d saved report(s); removed %d unnamed seeded product(s)", changed, removed)
+
+
+def recheck_seeded_reports():
+    """
+    Re-run seeded (Open Food Facts) reports through the current sanity checks.
+
+    Crowd-sourced data had unit errors (sodium in g entered as mg) and drink
+    powders filed as soft drinks. Each saved report keeps its extraction, so it
+    can be re-checked and re-scored without any network call. Only rows whose
+    data actually changes are rewritten (idempotent).
+    """
+    from app.models.db_models import ProductScan
+    from app.models.schemas import LabelExtraction
+    from app.services.analyzer import Analyzer, sanitize_extraction
+    from app.services.open_food_facts import name_first_category
+
+    analyzer = Analyzer()
+    with Session(engine) as session:
+        changed = 0
+        rows = session.exec(select(ProductScan).where(ProductScan.source == "open_food_facts")).all()
+        for scan in rows:
+            try:
+                data = json.loads(scan.full_analysis_json or "{}")
+                extraction = LabelExtraction.model_validate(data.get("extraction") or {})
+            except Exception:  # noqa: BLE001 - skip anything unreadable
+                continue
+            remapped = extraction
+            if (by_name := name_first_category(extraction.product_name)) is not None and (
+                extraction.product_category, extraction.sub_category
+            ) != by_name:
+                remapped = extraction.model_copy(update={"product_category": by_name[0], "sub_category": by_name[1]})
+            fixed = sanitize_extraction(remapped)
+            if fixed == extraction:
+                continue
+            analysis = analyzer.analyze(fixed).model_copy(update={"price_analysis": None, "data_source": "open_food_facts"})
+            n = fixed.nutrition_per_serving
+            scan.full_analysis_json = analysis.model_dump_json()
+            scan.translations_json = None  # cached Hindi no longer matches
+            scan.product_category = analysis.product_category.value
+            scan.sub_category = analysis.sub_category
+            scan.health_score = analysis.health_score
+            scan.one_line_summary = analysis.one_line_summary
+            scan.sodium_per_serving_mg = n.sodium_mg
+            scan.sugar_per_serving_g = n.sugar_g
+            scan.flag_count = len(analysis.ingredient_flags)
+            session.add(scan)
+            changed += 1
+        if changed:
+            session.commit()
+            logger.info("Re-checked and re-scored %d seeded report(s)", changed)
 
 
 def get_session():

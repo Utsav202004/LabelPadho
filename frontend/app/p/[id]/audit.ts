@@ -1,5 +1,17 @@
 // Server-side helper to read a saved audit for link previews.
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || "https://labelpadho.utsavgoyal.tech").replace(/\/$/, "");
+
+/** Full saved report, fetched on the server so the page HTML contains it (for Google and link previews). */
+export async function fetchAudit(id: string): Promise<any | null> {
+  if (!/^\d+$/.test(id)) return null;
+  try {
+    const res = await fetch(`${API_BASE}/api/history/${id}`, { next: { revalidate: 300 } });
+    return res.ok ? await res.json() : null;
+  } catch {
+    return null;
+  }
+}
 
 export type AuditSummary = {
   title: string;
