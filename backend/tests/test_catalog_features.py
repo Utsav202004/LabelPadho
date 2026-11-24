@@ -481,3 +481,50 @@ def test_condiment_names_win_over_vague_tags():
 
     assert _category(["en:confectioneries"], "Real Mayonnaise")[1] == "mayo_dressing"
     assert _category(["en:biscuits"], "Bourbon Biscuit")[1] == "biscuit_cookie"  # unaffected
+
+
+def test_missing_ingredients_are_stated_not_hidden():
+    from app.services.open_food_facts import to_extraction
+
+    bare = {k: v for k, v in OFF_MAGGI.items() if not k.startswith("ingredients")}
+    e = to_extraction(bare, "8901058851298")
+    assert e.ingredients == []
+    analysis = Analyzer().analyze(e)
+    assert "ingredient list isn't available" in analysis.detailed_summary
+    assert "contains 0 ingredients" not in analysis.detailed_summary
+    # A product that scores well on nutrition must not be called free of red flags
+    healthy = e.model_copy(update={"nutrition_per_100g": NutritionInfo(energy_kcal=350, protein_g=10, sugar_g=1, sodium_mg=50, total_fat_g=5, fiber_g=12)})
+    verdict = Analyzer().analyze(healthy).one_line_summary
+    assert "ingredient list not available" in verdict and "no major red flags" not in verdict
+
+    # Parsed ingredient list is used when OFF has no ingredients text
+    parsed = dict(bare, ingredients=[{"text": "Makhana", "percent": 92}, {"text": "Rice bran oil", "percent_estimate": 5}])
+    e2 = to_extraction(parsed, "8901058851298")
+    assert [(i.name, i.percentage) for i in e2.ingredients] == [("Makhana", 92.0), ("Rice bran oil", None)]
+
+
+def test_refresh_fills_missing_ingredients_in_place(client, monkeypatch):
+    from app.services import open_food_facts as off
+
+    c, _ = client
+    bare = {k: v for k, v in OFF_MAGGI.items() if not k.startswith("ingredients")}
+
+    async def fetch_bare(code):
+        return bare
+
+    monkeypatch.setattr(off, "fetch_product", fetch_bare)
+    scan_id = c.get("/api/products/barcode/8901058851298").json()["scan_id"]
+    assert c.get(f"/api/history/{scan_id}").json()["extraction"]["ingredients"] == []
+
+    monkeypatch.setenv("ADMIN_KEY", "admin-secret")
+    assert c.post("/api/admin/refresh-missing-ingredients").status_code in (401, 403)
+
+    async def fetch_full(code):
+        return OFF_MAGGI
+
+    monkeypatch.setattr(off, "fetch_product", fetch_full)
+    result = c.post("/api/admin/refresh-missing-ingredients", headers={"X-Admin-Key": "admin-secret"}).json()
+    assert len(result["updated"]) == 1 and result["still_missing"] == []
+    audit = c.get(f"/api/history/{scan_id}").json()  # same id, now complete
+    assert len(audit["extraction"]["ingredients"]) == 3
+    assert "ingredient list not available" not in audit["one_line_summary"]

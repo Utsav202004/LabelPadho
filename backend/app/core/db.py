@@ -228,23 +228,32 @@ def recheck_seeded_reports():
                 remapped = extraction.model_copy(update={"product_category": by_name[0], "sub_category": by_name[1]})
             fixed = sanitize_extraction(remapped)
             if fixed == extraction:
-                continue
-            analysis = analyzer.analyze(fixed).model_copy(update={"price_analysis": None, "data_source": "open_food_facts"})
-            n = fixed.nutrition_per_serving
-            scan.full_analysis_json = analysis.model_dump_json()
-            scan.translations_json = None  # cached Hindi no longer matches
-            scan.product_category = analysis.product_category.value
-            scan.sub_category = analysis.sub_category
-            scan.health_score = analysis.health_score
-            scan.one_line_summary = analysis.one_line_summary
-            scan.sodium_per_serving_mg = n.sodium_mg
-            scan.sugar_per_serving_g = n.sugar_g
-            scan.flag_count = len(analysis.ingredient_flags)
+                # Data unchanged; still re-score reports without ingredients so they say so honestly
+                if extraction.ingredients:
+                    continue
+                if analyzer.analyze(fixed).one_line_summary == scan.one_line_summary:
+                    continue
+            apply_rescore(scan, fixed, analyzer)
             session.add(scan)
             changed += 1
         if changed:
             session.commit()
             logger.info("Re-checked and re-scored %d seeded report(s)", changed)
+
+
+def apply_rescore(scan, extraction, analyzer) -> None:
+    """Re-analyse a seeded scan from its extraction and write the result back onto the row (caller commits)."""
+    analysis = analyzer.analyze(extraction).model_copy(update={"price_analysis": None, "data_source": "open_food_facts"})
+    n = extraction.nutrition_per_serving
+    scan.full_analysis_json = analysis.model_dump_json()
+    scan.translations_json = None  # cached Hindi no longer matches
+    scan.product_category = analysis.product_category.value
+    scan.sub_category = analysis.sub_category
+    scan.health_score = analysis.health_score
+    scan.one_line_summary = analysis.one_line_summary
+    scan.sodium_per_serving_mg = n.sodium_mg
+    scan.sugar_per_serving_g = n.sugar_g
+    scan.flag_count = len(analysis.ingredient_flags)
 
 
 def get_session():

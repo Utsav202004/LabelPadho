@@ -1246,6 +1246,9 @@ class Analyzer:
         if health_score is not None and health_score <= 4 and worst:
             reasons = " and ".join(w[0].lower() + w[1:] for w in worst)
             return f"{name} scores low ({health_score}/10), mainly for {reasons}."
+        if not extraction.ingredients:
+            # Without an ingredient list we can't rule out red flags, so don't claim there are none
+            return f"{name}: ingredient list not available yet, so this verdict is based on nutrition only."
         if serving and serving.servings_in_package and serving.servings_in_package > 3:
             return (
                 f"{name} — the label looks decent per serving, but remember: "
@@ -1269,7 +1272,10 @@ class Analyzer:
         nutrition = extraction.nutrition_per_serving
 
         # Para 1: What's in it
-        para1 = f"**{name}** contains {len(extraction.ingredients)} ingredients."
+        if extraction.ingredients:
+            para1 = f"**{name}** contains {len(extraction.ingredients)} ingredients."
+        else:
+            para1 = f"**{name}**: the ingredient list isn't available yet, so this report is based on the nutrition table only."
         if extraction.ingredients:
             top3 = ", ".join(i.name for i in extraction.ingredients[:3])
             para1 += f" The top ingredients (by quantity) are: {top3}."

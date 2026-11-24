@@ -3010,6 +3010,33 @@ export default function LabelPadhoApp({
               {/* Side-by-side compare */}
               {compareOpen && analysis && <ComparePanel base={analysis} onClose={() => setCompareOpen(false)} />}
 
+              {/* No ingredient list: say so, and let the shopper complete the report */}
+              {(shown.extraction.ingredients?.length ?? 0) === 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center gap-4">
+                  <div className="flex items-start gap-3 flex-1">
+                    <AlertTriangle className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-bold text-amber-900">Ingredient list missing</p>
+                      <p className="text-sm text-amber-900/80 mt-0.5">
+                        We only have this product&apos;s nutrition table, so the score is based on nutrition alone. Ingredient
+                        flags, claim checks and the ingredient chart need the ingredient list. Add a photo of the pack and it
+                        will be complete for everyone.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (shown.extraction.barcode) setPendingBarcode(shown.extraction.barcode);
+                      openAdd(productTitle(shown.extraction.brand, shown.extraction.product_name, shown.extraction.variant));
+                    }}
+                    className="shrink-0 rounded-xl bg-amber-600 hover:bg-amber-700 px-4 py-2 text-sm font-semibold text-white flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <Camera className="w-4 h-4" /> Add label photos
+                  </button>
+                </div>
+              )}
+
               {/* Personal health profile */}
               <ProfileCard analysis={shown} profile={profile} onChange={changeProfile} />
 

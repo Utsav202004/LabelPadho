@@ -13,6 +13,7 @@ re-running Gemini extraction.
 - GET /api/products/barcode/{code}        → catalog hit, else Open Food Facts, else "scan the label"
 """
 
+import json
 import logging
 import re
 from difflib import SequenceMatcher
@@ -294,3 +295,45 @@ async def seed_catalog(
         return await seed_from_open_food_facts(session, target=target, start_page=start_page)
     except httpx.HTTPError as e:
         raise HTTPException(status_code=502, detail=f"Open Food Facts unavailable: {e}")
+
+
+@router.post("/admin/refresh-missing-ingredients")
+async def refresh_missing_ingredients(
+    session: Session = Depends(get_session),
+    _admin: None = Depends(require_admin),
+):
+    """
+    Admin: re-fetch Open Food Facts products saved without an ingredient list.
+    OFF contributors keep adding data, so a product that had no ingredients
+    when it was seeded may have them now. Rows are updated in place (same id/link).
+    """
+    from app.core.db import apply_rescore
+    from app.models.schemas import LabelExtraction
+
+    updated, still_missing, failed = [], [], []
+    rows = session.exec(select(ProductScan).where(ProductScan.source == "open_food_facts")).all()
+    for scan in rows:
+        try:
+            extraction = LabelExtraction.model_validate(json.loads(scan.full_analysis_json or "{}").get("extraction") or {})
+        except Exception:  # noqa: BLE001 - skip unreadable rows
+            continue
+        if extraction.ingredients or not scan.barcode:
+            continue
+        label = f"{scan.id} {scan.product_name}"
+        try:
+            product = await off.fetch_product(scan.barcode)
+        except Exception as e:  # noqa: BLE001 - one bad lookup shouldn't stop the rest
+            logger.warning("OFF refresh failed for %s: %s", scan.barcode, e)
+            failed.append(label)
+            continue
+        fresh = off.to_extraction(product, scan.barcode) if product else None
+        if fresh is None or not fresh.ingredients:
+            still_missing.append(label)
+            continue
+        # Keep the catalog's cleaned name/brand; take OFF's ingredients and nutrition
+        fresh = sanitize_extraction(fresh.model_copy(update={"product_name": scan.product_name, "brand": scan.brand}))
+        apply_rescore(scan, fresh, _analyzer)
+        session.add(scan)
+        updated.append(label)
+    session.commit()
+    return {"updated": updated, "still_missing": still_missing, "failed": failed}

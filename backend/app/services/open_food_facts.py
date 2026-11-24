@@ -43,6 +43,7 @@ settings = OFFSettings()
 FIELDS = ",".join([
     "code", "product_name", "product_name_en", "brands", "quantity", "product_quantity",
     "serving_quantity", "nutriments", "ingredients_text_en", "ingredients_text",
+    "ingredients_text_hi", "ingredients",
     "categories_tags", "labels",
 ])
 
@@ -224,7 +225,9 @@ def to_extraction(product: dict, barcode: str) -> LabelExtraction | None:
     brand = clean_brand((product.get("brands") or "").split(",")[0].strip() or None)
     name = clean_off_name(product.get("product_name_en") or product.get("product_name") or "")
     category, sub = _category(product.get("categories_tags") or [], name)
-    ingredients_text = product.get("ingredients_text_en") or product.get("ingredients_text") or ""
+    ingredients_text = (
+        product.get("ingredients_text_en") or product.get("ingredients_text") or product.get("ingredients_text_hi") or ""
+    )
 
     return LabelExtraction(
         product_name=name,
@@ -236,8 +239,20 @@ def to_extraction(product: dict, barcode: str) -> LabelExtraction | None:
         barcode=barcode,
         nutrition_per_serving=per_serving,
         nutrition_per_100g=per_100g,
-        ingredients=split_ingredients(ingredients_text) if ingredients_text else [],
+        ingredients=split_ingredients(ingredients_text) if ingredients_text else _structured_ingredients(product),
     )
+
+
+def _structured_ingredients(product: dict) -> list[ExtractedIngredient]:
+    """Fallback when OFF has no ingredients text but does have its parsed ingredient list."""
+    out = []
+    for item in product.get("ingredients") or []:
+        name = " ".join(str(item.get("text") or "").replace("_", "").split()).strip(" .*")
+        if not name or len(name) > 160:
+            continue
+        pct = _num(item.get("percent"))  # only a percentage printed on the pack, never OFF's estimate
+        out.append(ExtractedIngredient(name=name, percentage=pct))
+    return out
 
 
 async def fetch_product(barcode: str) -> dict | None:
