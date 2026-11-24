@@ -8,6 +8,7 @@ re-running Gemini extraction.
 
 - GET /api/products/search?q=maggi        → unique products matching every search word
 - GET /api/products/suggestions           → latest unique products (search dropdown before typing)
+- GET /api/products/count                 → number of distinct products (live counter on the home page)
 - GET /api/products/{id}/alternatives     → better-scoring products on the same shelf + rank
 - GET /api/products/barcode/{code}        → catalog hit, else Open Food Facts, else "scan the label"
 """
@@ -153,6 +154,13 @@ async def search_products(
 ):
     """Search previously scanned products by name or brand (latest scan per product)."""
     return search_scans(session, q, limit)
+
+
+@router.get("/products/count")
+async def product_count(session: Session = Depends(get_session)):
+    """How many distinct products the shared catalog holds (repeat scans of one item count once)."""
+    keys = {_product_key(scan) for scan in session.exec(select(ProductScan)).all()}
+    return {"count": len(keys)}
 
 
 @router.get("/products/suggestions", response_model=List[ProductScanRead])

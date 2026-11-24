@@ -169,6 +169,11 @@ def test_suggestions_lists_latest_products_without_tokens(client):
     assert all("edit_token" not in d for d in data)
 
 
+def test_count_counts_each_product_once(client):
+    c, _ = client
+    assert c.get("/api/products/count").json() == {"count": 5}
+
+
 def test_search_matches_variant(client):
     c, _ = client
     assert [d["product_name"] for d in c.get("/api/products/search", params={"q": "chocolate cream"}).json()] == ["Bourbon"]

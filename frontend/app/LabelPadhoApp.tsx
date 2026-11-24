@@ -27,7 +27,9 @@ import {
   Flag,
   Scale,
   ScanBarcode,
-  Languages
+  Languages,
+  Plus,
+  Camera
 } from "lucide-react";
 
 interface NutritionInfo {
@@ -259,6 +261,20 @@ function saveEditToken(scanId: number, token: string) {
 // Locally: falls back to localhost:8000
 // On Vercel: set NEXT_PUBLIC_API_URL to your Render backend URL
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+// Questions shoppers actually ask in the aisle, floated behind the hero.
+// [text, position classes, show on small screens?]
+const AISLE_QUESTIONS: [string, string, boolean][] = [
+  ["Is this protein bar actually healthy?", "top-[2.5%] left-[4%] -rotate-2 lg:top-[6%] lg:left-[3%]", true],
+  ["Multigrain, or mostly maida?", "top-[10%] right-[4%] rotate-2", false],
+  ["How much sugar is in my juice?", "top-[24%] left-[2%] rotate-1", false],
+  ["\"No added sugar\", full story?", "top-[26%] right-[2%] -rotate-2", false],
+  ["Okay for my kid's tiffin?", "bottom-[15%] left-[2%] rotate-2", false],
+  ["Why is the serving size so tiny?", "bottom-[15%] right-[2%] -rotate-1", false],
+  ["High protein, or high marketing?", "bottom-[2.5%] right-[4%] rotate-1 lg:bottom-[3%] lg:right-auto lg:left-[22%]", true],
+  ["Is \"diet\" namkeen really diet?", "bottom-[3%] right-[22%] rotate-1", false],
+  ["Is brown bread really brown?", "top-[2%] left-[38%] rotate-1", false],
+];
 const MAX_CLAIM_PHOTOS = 4;
 
 // ============================================================
@@ -2254,6 +2270,24 @@ export default function LabelPadhoApp({
   const [barcodeOpen, setBarcodeOpen] = useState(false);
   const [barcodeMsg, setBarcodeMsg] = useState<string | null>(null);
   const [pendingBarcode, setPendingBarcode] = useState<string | null>(null);
+
+  // "Add a product" panel: photos are the fallback, not the first thing people see
+  const [addOpen, setAddOpen] = useState(false);
+  const addRef = React.useRef<HTMLElement>(null);
+  const openAdd = (name?: string) => {
+    if (name) setProductName(name);
+    setAddOpen(true);
+    setTimeout(() => addRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
+  };
+
+  // Live count of products in the shared catalog
+  const [productCount, setProductCount] = useState<number | null>(null);
+  useEffect(() => {
+    fetch(`${API_BASE}/api/products/count`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => d && typeof d.count === "number" && setProductCount(d.count))
+      .catch(() => {});
+  }, [analysis?.scan_id]);
   const lookupBarcode = React.useCallback(async (code: string) => {
     setBarcodeOpen(false);
     setBarcodeMsg(`Looking up ${code}...`);
@@ -2268,7 +2302,7 @@ export default function LabelPadhoApp({
         await viewPastScan(data.scan_id);
       } else {
         setPendingBarcode(code);
-        setBarcodeMsg(data.message || "Not found. Scan the label below.");
+        setBarcodeMsg("No one has added this product yet. Every product here was added once by someone and saved for everyone. Add this one with a few photos and the next person gets it instantly.");
       }
     } catch (e: any) {
       setBarcodeMsg(e.message);
@@ -2315,9 +2349,13 @@ export default function LabelPadhoApp({
     setError(null);
     setAnalysis(demo);
     setTimeout(() => {
-      window.scrollTo({ top: 480, behavior: "smooth" });
+      scrollToResults();
     }, 100);
   };
+
+  const resultsRef = React.useRef<HTMLElement>(null);
+  const scrollToResults = () =>
+    setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
 
   const openFromSearch = (open: () => void) => {
     setSearchOpen(false);
@@ -2332,7 +2370,7 @@ export default function LabelPadhoApp({
       if (!res.ok) throw new Error("Could not load past scan details");
       const pastData: ProductAnalysis = await res.json();
       setAnalysis(pastData);
-        window.scrollTo({ top: 400, behavior: "smooth" });
+        scrollToResults();
     } catch (err: any) {
       setError(err.message || "Could not open that report");
     } finally {
@@ -2402,33 +2440,32 @@ export default function LabelPadhoApp({
 
   return (
     <main className="max-w-5xl mx-auto px-4 py-8">
-      {/* Header */}
-      <header className="text-center mb-8">
-        <h1 className="text-4xl font-extrabold tracking-tight text-slate-900 sm:text-5xl">
-          Label<span className="text-emerald-600">Padho</span>
-        </h1>
-        <p className="mt-3 text-lg text-slate-600 max-w-2xl mx-auto">
-          See what's really inside packaged food: misleading claims, hidden sugar and salt, and healthier swaps.
-        </p>
-        <p className="mt-2.5 text-xs text-slate-500 max-w-xl mx-auto">
-          Inspired by the consumer-awareness movements of changemakers like{" "}
-          <span className="font-semibold text-slate-700">FoodPharmer (Revant Himatsingka)</span> and{" "}
-          <span className="font-semibold text-slate-700">Glucose Gal (Pratima Dixit)</span>.
-        </p>
+      {/* Hero: search and barcode first, with shoppers' questions floating behind */}
+      <section className="relative mb-8 rounded-3xl border border-emerald-100 bg-gradient-to-b from-emerald-50 via-white to-white px-4 pt-16 pb-16 sm:px-10 sm:pt-16 sm:pb-24">
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden rounded-3xl">
+          {AISLE_QUESTIONS.map(([text, pos, mobile], i) => (
+            <span
+              key={text}
+              className={`aisle-q absolute ${pos} ${mobile ? "" : "hidden lg:inline-block"} whitespace-nowrap rounded-full border border-emerald-200/70 bg-white/70 px-3 py-1 text-[11px] sm:text-xs font-medium text-emerald-900/45`}
+              style={{ animationDelay: `${i * -1.7}s` }}
+            >
+              {text}
+            </span>
+          ))}
+        </div>
 
-      </header>
+        <div className="relative z-10 mx-auto max-w-2xl text-center">
+          <h1 className="text-4xl font-extrabold tracking-tight text-slate-900 sm:text-6xl">
+            Label<span className="text-emerald-600">Padho</span>
+          </h1>
+          <p className="mt-3 text-lg sm:text-xl text-slate-700">
+            Is your packaged food really healthy? Find out in a second.
+          </p>
 
-      <>
-          {/* Product Search — open any saved report (or a sample) without uploading */}
-          <section className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-6 mb-6">
-            <label htmlFor="product-search" className="block text-sm font-semibold text-slate-900">
-              Already checked by someone? Search first
-            </label>
-            <p className="text-xs text-slate-500 mt-0.5 mb-3">
-              Every product anyone checks is saved for everyone. Open its report instantly, no photos needed.
-            </p>
-            <div className="relative" ref={searchBoxRef}>
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-[1.4rem] -translate-y-1/2 pointer-events-none" />
+          <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:items-stretch">
+            <div className="relative flex-1" ref={searchBoxRef}>
+              <label htmlFor="product-search" className="sr-only">Search a product</label>
+              <Search className="w-5 h-5 text-slate-400 absolute left-4 top-7 -translate-y-1/2 pointer-events-none" />
               <input
                 id="product-search"
                 type="text"
@@ -2439,18 +2476,18 @@ export default function LabelPadhoApp({
                 }}
                 onFocus={() => setSearchOpen(true)}
                 onKeyDown={(e) => e.key === "Escape" && setSearchOpen(false)}
-                placeholder="Try Britannia Bourbon, Bhujia, Ragi Chips..."
+                placeholder="Search Maggi, Bourbon, Ragi Chips..."
                 autoComplete="off"
                 role="combobox"
                 aria-expanded={searchOpen}
                 aria-controls="product-search-results"
-                className="w-full pl-9 pr-9 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-400"
+                className="w-full h-14 pl-12 pr-11 rounded-2xl border border-slate-200 bg-white text-base shadow-md shadow-emerald-900/5 focus:outline-none focus:ring-4 focus:ring-emerald-500/20 focus:border-emerald-400"
               />
               {searchQuery && (
                 <button
                   type="button"
                   onClick={() => setSearchQuery("")}
-                  className="absolute right-2 top-[1.4rem] -translate-y-1/2 p-1 text-slate-400 hover:text-slate-700 cursor-pointer"
+                  className="absolute right-3 top-7 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-700 cursor-pointer"
                   aria-label="Clear search"
                 >
                   <X className="w-4 h-4" />
@@ -2460,7 +2497,7 @@ export default function LabelPadhoApp({
               {searchOpen && (
                 <div
                   id="product-search-results"
-                  className="absolute z-20 left-0 right-0 mt-2 bg-white border border-slate-200 rounded-xl shadow-lg max-h-[26rem] overflow-y-auto"
+                  className="absolute z-30 left-0 right-0 mt-2 text-left bg-white border border-slate-200 rounded-xl shadow-lg max-h-[26rem] overflow-y-auto"
                 >
                   {(() => {
                     const catalogItems = q ? searchResults : suggestions;
@@ -2496,11 +2533,23 @@ export default function LabelPadhoApp({
                           <ul>{catalogItems.map(renderCatalogItem)}</ul>
                         ) : (
                           <p className="px-4 py-2 text-xs text-slate-500">
-                            {q && searchDone
-                              ? `No one has checked "${searchQuery.trim()}" yet. Upload its label below and it will be searchable for everyone.`
-                              : !q
-                              ? "Nothing scanned yet. Be the first!"
-                              : null}
+                            {q && searchDone ? (
+                              <>
+                                No one has added &ldquo;{searchQuery.trim()}&rdquo; yet. Every product here was added once by someone and saved for everyone.{" "}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSearchOpen(false);
+                                    openAdd(searchQuery.trim());
+                                  }}
+                                  className="font-semibold text-emerald-700 hover:underline cursor-pointer"
+                                >
+                                  Add it for everyone
+                                </button>
+                              </>
+                            ) : !q ? (
+                              "Nothing added yet. Be the first!"
+                            ) : null}
                           </p>
                         )}
 
@@ -2538,29 +2587,83 @@ export default function LabelPadhoApp({
                 </div>
               )}
             </div>
+            <button
+              type="button"
+              onClick={() => setBarcodeOpen((o) => !o)}
+              className="h-14 shrink-0 rounded-2xl bg-emerald-600 px-6 text-base font-semibold text-white shadow-md shadow-emerald-900/10 hover:bg-emerald-700 flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <ScanBarcode className="w-5 h-5" /> Scan barcode
+            </button>
+          </div>
 
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setBarcodeOpen((o) => !o)}
-                className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 flex items-center gap-1.5 cursor-pointer"
-              >
-                <ScanBarcode className="w-4 h-4" /> Scan barcode
-              </button>
-              <span className="text-[11px] text-slate-500">Instant match from our catalog or Open Food Facts. No photos needed.</span>
+          {barcodeOpen && <div className="mt-4 text-left"><BarcodeScanner onCode={lookupBarcode} onClose={() => setBarcodeOpen(false)} /></div>}
+          {barcodeMsg && (
+            <div className="mt-4 text-left text-sm text-slate-700 bg-white border border-slate-200 rounded-xl px-4 py-3 shadow-sm">
+              <p>{barcodeMsg}</p>
+              {pendingBarcode && (
+                <button
+                  type="button"
+                  onClick={() => openAdd()}
+                  className="mt-2 text-sm font-semibold text-emerald-700 hover:underline cursor-pointer"
+                >
+                  Add this product
+                </button>
+              )}
             </div>
-            {barcodeOpen && <BarcodeScanner onCode={lookupBarcode} onClose={() => setBarcodeOpen(false)} />}
-            {barcodeMsg && (
-              <p className="mt-2 text-xs text-slate-700 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
-                {barcodeMsg}
-                {pendingBarcode && " The barcode will be saved with your scan so the next person gets an instant match."}
-              </p>
-            )}
-          </section>
+          )}
 
-          {/* Upload Form */}
-          <section className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 sm:p-8 mb-10">
-            <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="mt-6 inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-white px-4 py-1.5 text-sm text-slate-700 shadow-sm">
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
+            </span>
+            {productCount != null ? (
+              <span>
+                <span className="font-bold text-slate-900 tabular-nums">{productCount.toLocaleString("en-IN")}</span> products checked and counting
+              </span>
+            ) : (
+              <span>Products checked by the community</span>
+            )}
+          </div>
+          <p className="mt-3 text-sm text-slate-500">
+            Every product was added once by someone, and saved for everyone. Results in under a second, no photos needed.
+          </p>
+        </div>
+      </section>
+
+      <p className="-mt-4 mb-8 text-center text-xs text-slate-500 max-w-xl mx-auto">
+        Inspired by the consumer-awareness movements of changemakers like{" "}
+        <span className="font-semibold text-slate-700">FoodPharmer (Revant Himatsingka)</span> and{" "}
+        <span className="font-semibold text-slate-700">Glucose Gal (Pratima Dixit)</span>.
+      </p>
+
+      <>
+          {/* Add a product: the fallback when search and barcode find nothing */}
+          <section ref={addRef} id="add-product" className="scroll-mt-6 bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-6 mb-10">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                <div className="rounded-xl bg-emerald-50 p-2.5 text-emerald-700 shrink-0">
+                  <Camera className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-slate-900">Can&apos;t find your product? Add it for everyone</h2>
+                  <p className="text-sm text-slate-500 mt-0.5">
+                    Snap the label once. AI reads it once, and it&apos;s saved forever, so the next person gets it in under a second.
+                  </p>
+                </div>
+              </div>
+              {!addOpen && (
+                <button
+                  type="button"
+                  onClick={() => setAddOpen(true)}
+                  className="shrink-0 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" /> Add a product
+                </button>
+              )}
+            </div>
+            {addOpen && (
+            <form onSubmit={handleSubmit} className="space-y-6 mt-6 pt-6 border-t border-slate-100">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {/* 1. Nutrition Table (Required) */}
                 <div className="border-2 border-dashed border-slate-300 rounded-xl p-4 text-center bg-white hover:border-emerald-400 hover:bg-emerald-50/30 transition">
@@ -2778,11 +2881,12 @@ export default function LabelPadhoApp({
                 )}
               </button>
             </form>
+            )}
           </section>
 
           {/* Analysis Results Display */}
           {shown && (
-            <section className="space-y-8 animate-in fade-in duration-500">
+            <section ref={resultsRef} className="scroll-mt-4 space-y-8 animate-in fade-in duration-500">
               {/* Top Score Banner */}
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 flex flex-col md:flex-row items-center justify-between gap-6">
                 <div>
